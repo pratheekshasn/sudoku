@@ -61,11 +61,25 @@ Fill the 9×9 grid so that each:
 ```
 sudoku/
 ├── main.cpp              # Entry point
-├── sudoku_game.h/.cpp    # Interactive game logic
-├── model/                # Core Sudoku classes
-│   ├── board.h/.cpp      # Game board (9x9 grid)
-│   ├── grid.h/.cpp       # Subgrid (3x3 section)
-│   └── cell.h/.cpp       # Individual cell
+├── model/                # 📊 Data layer (MVC Model)
+│   ├── board.h/.cpp      #   └── Game board (9x9 grid)
+│   ├── grid.h/.cpp       #   └── Subgrid (3x3 section)
+│   └── cell.h/.cpp       #   └── Individual cell
+├── view/                 # 🎨 Presentation layer (MVC View)
+│   └── console_view.h/.cpp #   └── Console UI rendering
+├── controller/           # 🎮 Logic layer (MVC Controller)
+│   └── game_controller.h/.cpp # └── Game flow coordination
+├── tests/                # 🧪 Test files
+│   ├── test_grid_operators.cpp
+│   └── test_board_architecture.cpp
 ├── Makefile              # Build configuration
 └── README.md             # This file
 ```
+
+### Architecture Benefits 🎯
+
+- **🔄 MVC Pattern**: Clean separation of concerns
+- **🎨 View Layer**: Easy to add new UI (web, mobile, desktop)
+- **🎮 Controller**: Game logic separated from presentation
+- **📊 Model**: Pure data structures, UI-independent
+- **🧪 Testable**: Each layer can be tested independently

@@ -10,9 +10,16 @@ OBJDIR = obj
 BINDIR = bin
 
 # Source files
-SOURCES = $(SRCDIR)/cell.cpp $(SRCDIR)/grid.cpp $(SRCDIR)/board.cpp sudoku_game.cpp
-OBJECTS = $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
-OBJECTS := $(OBJECTS:sudoku_game.cpp=$(OBJDIR)/sudoku_game.o)
+MODEL_SOURCES = $(SRCDIR)/cell.cpp $(SRCDIR)/grid.cpp $(SRCDIR)/board.cpp
+VIEW_SOURCES = view/console_view.cpp
+CONTROLLER_SOURCES = controller/game_controller.cpp
+SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES)
+
+# Object files
+MODEL_OBJECTS = $(MODEL_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+VIEW_OBJECTS = $(VIEW_SOURCES:view/%.cpp=$(OBJDIR)/view_%.o)
+CONTROLLER_OBJECTS = $(CONTROLLER_SOURCES:controller/%.cpp=$(OBJDIR)/controller_%.o)
+OBJECTS = $(MODEL_OBJECTS) $(VIEW_OBJECTS) $(CONTROLLER_OBJECTS)
 
 # Main targets
 MAIN_TARGET = $(BINDIR)/sudoku
@@ -33,8 +40,12 @@ $(BINDIR):
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Compile sudoku_game.cpp (not in model directory)
-$(OBJDIR)/sudoku_game.o: sudoku_game.cpp | $(OBJDIR)
+# Compile view files
+$(OBJDIR)/view_%.o: view/%.cpp | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compile controller files
+$(OBJDIR)/controller_%.o: controller/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # Main executable
@@ -74,7 +85,8 @@ release: $(MAIN_TARGET)
 $(OBJDIR)/cell.o: $(SRCDIR)/cell.cpp $(SRCDIR)/cell.h
 $(OBJDIR)/grid.o: $(SRCDIR)/grid.cpp $(SRCDIR)/grid.h $(SRCDIR)/cell.h
 $(OBJDIR)/board.o: $(SRCDIR)/board.cpp $(SRCDIR)/board.h $(SRCDIR)/grid.h $(SRCDIR)/cell.h
-$(OBJDIR)/sudoku_game.o: sudoku_game.cpp sudoku_game.h $(SRCDIR)/board.h
+$(OBJDIR)/view_console_view.o: view/console_view.cpp view/console_view.h $(SRCDIR)/board.h
+$(OBJDIR)/controller_game_controller.o: controller/game_controller.cpp controller/game_controller.h $(SRCDIR)/board.h view/console_view.h
 
 # Help target
 help:
