@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Sudoku Game</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .game-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .title {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .sudoku-board {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 2px;
+            background: #333;
+            border: 3px solid #333;
+            border-radius: 8px;
+            padding: 8px;
+            margin: 20px auto;
+            max-width: 450px;
+        }
+        
+        .cell {
+            width: 45px;
+            height: 45px;
+            border: none;
+            background: white;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 3px;
+        }
+        
+        .cell:hover {
+            background: #e3f2fd;
+            transform: scale(1.05);
+        }
+        
+        .cell.filled {
+            background: #f5f5f5;
+            color: #2196F3;
+        }
+        
+        .cell.invalid {
+            background: #ffebee;
+            color: #f44336;
+        }
+        
+        .cell.selected {
+            background: #2196F3;
+            color: white;
+        }
+        
+        /* Subgrid borders */
+        .cell:nth-child(3n) {
+            border-right: 2px solid #333;
+        }
+        
+        .cell:nth-child(n+19):nth-child(-n+27),
+        .cell:nth-child(n+46):nth-child(-n+54) {
+            border-bottom: 2px solid #333;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(45deg, #666, #999);
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, #4CAF50, #81C784);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, #f44336, #ef5350);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .number-pad {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            max-width: 300px;
+            margin: 20px auto;
+        }
+        
+        .number-btn {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 50%;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            transition: all 0.2s ease;
+        }
+        
+        .number-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .status.valid {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+        
+        .status.invalid {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+        
+        .status.complete {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #2196f3;
+        }
+        
+        @media (max-width: 600px) {
+            .cell {
+                width: 35px;
+                height: 35px;
+                font-size: 14px;
+            }
+            
+            .game-container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .title {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="title">🎯 Sudoku</h1>
+        
+        <div class="status" id="gameStatus">
+            Loading game...
+        </div>
+        
+        <div class="sudoku-board" id="sudokuBoard">
+            <!-- 81 cells will be generated by JavaScript -->
+        </div>
+        
+        <div class="number-pad">
+            <button class="number-btn" onclick="selectNumber(1)">1</button>
+            <button class="number-btn" onclick="selectNumber(2)">2</button>
+            <button class="number-btn" onclick="selectNumber(3)">3</button>
+            <button class="number-btn" onclick="selectNumber(4)">4</button>
+            <button class="number-btn" onclick="selectNumber(5)">5</button>
+            <button class="number-btn" onclick="selectNumber(6)">6</button>
+            <button class="number-btn" onclick="selectNumber(7)">7</button>
+            <button class="number-btn" onclick="selectNumber(8)">8</button>
+            <button class="number-btn" onclick="selectNumber(9)">9</button>
+            <button class="number-btn" onclick="selectNumber(0)" style="background: linear-gradient(45deg, #f44336, #ef5350);">✕</button>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-success" onclick="loadPuzzle()">New Puzzle</button>
+            <button class="btn btn-secondary" onclick="clearBoard()">Clear Board</button>
+            <button class="btn btn-primary" onclick="validateBoard()">Validate</button>
+            <button class="btn btn-danger" onclick="resetGame()">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        let selectedCell = null;
+        let selectedNumber = null;
+        let gameBoard = Array(9).fill().map(() => Array(9).fill(0));
+        
+        // Initialize the game board
+        function initializeBoard() {
+            const board = document.getElementById('sudokuBoard');
+            board.innerHTML = '';
+            
+            for (let i = 0; i < 81; i++) {
+                const cell = document.createElement('input');
+                cell.type = 'text';
+                cell.maxLength = 1;
+                cell.className = 'cell';
+                cell.id = `cell-${i}`;
+                
+                const row = Math.floor(i / 9);
+                const col = i % 9;
+                
+                cell.addEventListener('click', () => selectCell(row, col));
+                cell.addEventListener('input', (e) => handleInput(row, col, e.target.value));
+                cell.addEventListener('keydown', handleKeydown);
+                
+                board.appendChild(cell);
+            }
+        }
+        
+        function selectCell(row, col) {
+            // Remove previous selection
+            if (selectedCell) {
+                selectedCell.classList.remove('selected');
+            }
+            
+            selectedCell = document.getElementById(`cell-${row * 9 + col}`);
+            selectedCell.classList.add('selected');
+            selectedCell.focus();
+        }
+        
+        function selectNumber(num) {
+            selectedNumber = num;
+            if (selectedCell) {
+                handleInput(
+                    Math.floor(selectedCell.id.split('-')[1] / 9),
+                    selectedCell.id.split('-')[1] % 9,
+                    num === 0 ? '' : num.toString()
+                );
+            }
+        }
+        
+        async function handleInput(row, col, value) {
+            if (value === '' || (value >= '1' && value <= '9')) {
+                const numValue = value === '' ? 0 : parseInt(value);
+                
+                try {
+                    // Call C++ backend via Flask API
+                    const response = await fetch('http://localhost:5000/api/move', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            row: row + 1, // C++ expects 1-based indexing
+                            col: col + 1,
+                            value: numValue
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        // Update from C++ backend response
+                        gameBoard = result.data;
+                        updateDisplay();
+                        await updateGameStatus(); // Now async
+                        
+                        // Auto-move to next cell
+                        if (value !== '') {
+                            moveToNextCell(row, col);
+                        }
+                    } else {
+                        // Show error and revert
+                        alert('❌ ' + result.message);
+                        // Don't update the cell if move was invalid
+                    }
+                } catch (error) {
+                    console.error('Error calling API:', error);
+                    alert('🔌 Connection error! Make sure the server is running.');
+                }
+            }
+        }
+        
+        function handleKeydown(e) {
+            const cellId = e.target.id;
+            const index = parseInt(cellId.split('-')[1]);
+            const row = Math.floor(index / 9);
+            const col = index % 9;
+            
+            switch(e.key) {
+                case 'ArrowUp':
+                    if (row > 0) selectCell(row - 1, col);
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                    if (row < 8) selectCell(row + 1, col);
+                    e.preventDefault();
+                    break;
+                case 'ArrowLeft':
+                    if (col > 0) selectCell(row, col - 1);
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                    if (col < 8) selectCell(row, col + 1);
+                    e.preventDefault();
+                    break;
+                case 'Delete':
+                case 'Backspace':
+                    handleInput(row, col, '');
+                    e.preventDefault();
+                    break;
+            }
+        }
+        
+        function moveToNextCell(row, col) {
+            let nextIndex = row * 9 + col + 1;
+            if (nextIndex < 81) {
+                const nextRow = Math.floor(nextIndex / 9);
+                const nextCol = nextIndex % 9;
+                selectCell(nextRow, nextCol);
+            }
+        }
+        
+        function updateCellStyle(cell, value) {
+            cell.classList.remove('filled', 'invalid');
+            if (value !== '') {
+                cell.classList.add('filled');
+            }
+        }
+        
+        async function updateGameStatus() {
+            const status = document.getElementById('gameStatus');
+            
+            try {
+                // Use C++ backend for validation
+                const response = await fetch('http://localhost:5000/api/validate', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const isValid = result.data.valid;
+                    const isComplete = checkComplete(); // Still check completion locally
+                    
+                    if (isComplete && isValid) {
+                        status.textContent = '🎉 Congratulations! Puzzle solved! (Validated by C++)';
+                        status.className = 'status complete';
+                    } else if (isValid) {
+                        status.textContent = '✅ Valid board - Keep going! (C++ validation)';
+                        status.className = 'status valid';
+                    } else {
+                        status.textContent = '❌ Invalid board - Check for duplicates (C++ validation)';
+                        status.className = 'status invalid';
+                    }
+                } else {
+                    // Fallback to local validation if C++ fails
+                    fallbackUpdateGameStatus();
+                }
+            } catch (error) {
+                console.warn('C++ validation failed, using local fallback:', error);
+                // Fallback to local validation
+                fallbackUpdateGameStatus();
+            }
+        }
+        
+        function fallbackUpdateGameStatus() {
+            const status = document.getElementById('gameStatus');
+            const isValid = validateSudoku();
+            const isComplete = checkComplete();
+            
+            if (isComplete && isValid) {
+                status.textContent = '🎉 Congratulations! Puzzle solved! (Local validation)';
+                status.className = 'status complete';
+            } else if (isValid) {
+                status.textContent = '✅ Valid board - Keep going! (Local fallback)';
+                status.className = 'status valid';
+            } else {
+                status.textContent = '❌ Invalid board - Check for duplicates (Local fallback)';
+                status.className = 'status invalid';
+            }
+        }
+        
+        function validateSudoku() {
+            // Check rows
+            for (let row = 0; row < 9; row++) {
+                if (!isValidSet(gameBoard[row])) return false;
+            }
+            
+            // Check columns
+            for (let col = 0; col < 9; col++) {
+                const column = gameBoard.map(row => row[col]);
+                if (!isValidSet(column)) return false;
+            }
+            
+            // Check 3x3 subgrids
+            for (let boxRow = 0; boxRow < 3; boxRow++) {
+                for (let boxCol = 0; boxCol < 3; boxCol++) {
+                    const box = [];
+                    for (let row = boxRow * 3; row < boxRow * 3 + 3; row++) {
+                        for (let col = boxCol * 3; col < boxCol * 3 + 3; col++) {
+                            box.push(gameBoard[row][col]);
+                        }
+                    }
+                    if (!isValidSet(box)) return false;
+                }
+            }
+            
+            return true;
+        }
+        
+        function isValidSet(arr) {
+            const seen = new Set();
+            for (const num of arr) {
+                if (num !== 0) {
+                    if (seen.has(num)) return false;
+                    seen.add(num);
+                }
+            }
+            return true;
+        }
+        
+        function checkComplete() {
+            return gameBoard.every(row => row.every(cell => cell !== 0));
+        }
+        
+        async function loadPuzzle() {
+            try {
+                const response = await fetch('http://localhost:5000/api/puzzle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    gameBoard = result.data;
+                    updateDisplay();
+                    await updateGameStatus(); // Now async
+                } else {
+                    alert('❌ Failed to load puzzle: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error loading puzzle:', error);
+                alert('🔌 Connection error! Make sure the server is running.');
+                // Fallback to hardcoded puzzle if API fails
+                await loadFallbackPuzzle(); // Now async
+            }
+        }
+        
+        async function loadFallbackPuzzle() {
+            // Fallback puzzle if API is unavailable
+            const puzzle = [
+                [5, 3, 0, 0, 7, 0, 0, 0, 0],
+                [6, 0, 0, 1, 9, 5, 0, 0, 0],
+                [0, 9, 8, 0, 0, 0, 0, 6, 0],
+                [8, 0, 0, 0, 6, 0, 0, 0, 3],
+                [4, 0, 0, 8, 0, 3, 0, 0, 1],
+                [7, 0, 0, 0, 2, 0, 0, 0, 6],
+                [0, 6, 0, 0, 0, 0, 2, 8, 0],
+                [0, 0, 0, 4, 1, 9, 0, 0, 5],
+                [0, 0, 0, 0, 8, 0, 0, 7, 9]
+            ];
+            
+            gameBoard = puzzle.map(row => [...row]);
+            updateDisplay();
+            await updateGameStatus(); // Now async
+        }
+        
+        async function clearBoard() {
+            try {
+                const response = await fetch('http://localhost:5000/api/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    gameBoard = result.data;
+                    updateDisplay();
+                    await updateGameStatus(); // Now async
+                } else {
+                    alert('❌ Failed to clear board: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error clearing board:', error);
+                alert('🔌 Connection error! Make sure the server is running.');
+            }
+        }
+        
+        function updateDisplay() {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const cell = document.getElementById(`cell-${row * 9 + col}`);
+                    const value = gameBoard[row][col];
+                    cell.value = value === 0 ? '' : value.toString();
+                    updateCellStyle(cell, cell.value);
+                }
+            }
+        }
+        
+        async function validateBoard() {
+            // Just call updateGameStatus since it now uses C++ validation
+            await updateGameStatus();
+        }
+        
+        function resetGame() {
+            if (confirm('Are you sure you want to reset the game?')) {
+                clearBoard();
+            }
+        }
+        
+        // Initialize the game when page loads
+        window.addEventListener('load', async () => {
+            initializeBoard();
+            
+            // Load initial board state from C++ backend
+            try {
+                const response = await fetch('http://localhost:5000/api/board', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    gameBoard = result.data;
+                    updateDisplay();
+                    await updateGameStatus(); // Now async
+                    
+                    // Show connection success
+                    const status = document.getElementById('gameStatus');
+                    status.textContent = '🔗 Connected to C++ backend!';
+                    status.className = 'status valid';
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Failed to connect to backend:', error);
+                // Fallback to local puzzle
+                await loadFallbackPuzzle(); // Now async
+                
+                const status = document.getElementById('gameStatus');
+                status.textContent = '⚠️ Using offline mode - C++ backend not available';
+                status.className = 'status invalid';
+            }
+        });
+    </script>
+</body>
+</html>

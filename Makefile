@@ -13,21 +13,24 @@ BINDIR = bin
 MODEL_SOURCES = $(SRCDIR)/cell.cpp $(SRCDIR)/grid.cpp $(SRCDIR)/board.cpp
 VIEW_SOURCES = view/console_view.cpp
 CONTROLLER_SOURCES = controller/game_controller.cpp
-SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES)
+API_SOURCES = api/json_api.cpp
+SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES) $(API_SOURCES)
 
 # Object files
 MODEL_OBJECTS = $(MODEL_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 VIEW_OBJECTS = $(VIEW_SOURCES:view/%.cpp=$(OBJDIR)/view_%.o)
 CONTROLLER_OBJECTS = $(CONTROLLER_SOURCES:controller/%.cpp=$(OBJDIR)/controller_%.o)
+API_OBJECTS = $(API_SOURCES:api/%.cpp=$(OBJDIR)/api_%.o)
 OBJECTS = $(MODEL_OBJECTS) $(VIEW_OBJECTS) $(CONTROLLER_OBJECTS)
 
 # Main targets
 MAIN_TARGET = $(BINDIR)/sudoku
 TEST_GRID_TARGET = $(BINDIR)/test_grid
 TEST_BOARD_TARGET = $(BINDIR)/test_board
+API_TARGET = $(BINDIR)/sudoku_api
 
 # Default target
-all: $(MAIN_TARGET)
+all: $(MAIN_TARGET) $(API_TARGET)
 
 # Create directories if they don't exist
 $(OBJDIR):
@@ -48,9 +51,17 @@ $(OBJDIR)/view_%.o: view/%.cpp | $(OBJDIR)
 $(OBJDIR)/controller_%.o: controller/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
+# Compile API files
+$(OBJDIR)/api_%.o: api/%.cpp | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
 # Main executable
 $(MAIN_TARGET): main.cpp $(OBJECTS) | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) main.cpp $(OBJECTS) -o $@
+
+# API executable (doesn't need view layer)
+$(API_TARGET): api/api_main.cpp $(MODEL_OBJECTS) $(API_OBJECTS) | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) api/api_main.cpp $(MODEL_OBJECTS) $(API_OBJECTS) -o $@
 
 # Test executables
 $(TEST_GRID_TARGET): tests/test_grid_operators.cpp $(OBJECTS) | $(BINDIR)
@@ -63,6 +74,36 @@ $(TEST_BOARD_TARGET): tests/test_board_architecture.cpp $(OBJECTS) | $(BINDIR)
 run: $(MAIN_TARGET)
 	./$(MAIN_TARGET)
 
+run-api: $(API_TARGET)
+	./$(API_TARGET) get_board
+
+# Python virtual environment setup
+venv:
+	@echo "🐍 Creating Python virtual environment..."
+	python3 -m venv venv
+	@echo "📦 Installing Flask and dependencies..."
+	./venv/bin/pip install flask flask-cors
+	@echo "✅ Virtual environment created! Use 'make run-server' to start."
+
+run-server: $(API_TARGET)
+	@if [ ! -d "venv" ]; then \
+		echo "🐍 Creating Python virtual environment..."; \
+		python3 -m venv venv; \
+		echo "📦 Installing Flask and dependencies..."; \
+		./venv/bin/pip install flask flask-cors; \
+		echo "✅ Virtual environment created!"; \
+	fi
+	@echo "🚀 Starting API Bridge Server..."
+	@echo "🌐 Server will run on http://localhost:5000"
+	@echo "📂 Open web/index.html in your browser"
+	cd api && ../venv/bin/python bridge_server.py
+
+# Alternative: run server without auto-creating venv
+run-server-simple: $(API_TARGET)
+	@echo "🚀 Starting API Bridge Server (using system Python)..."
+	@echo "⚠️  Make sure Flask is installed: pip install flask flask-cors"
+	cd api && python3 bridge_server.py
+
 run-test-grid: $(TEST_GRID_TARGET)
 	./$(TEST_GRID_TARGET)
 
@@ -72,6 +113,10 @@ run-test-board: $(TEST_BOARD_TARGET)
 # Clean up
 clean:
 	rm -rf $(OBJDIR) $(BINDIR)
+
+clean-all: clean
+	@echo "🧹 Cleaning everything including Python venv..."
+	rm -rf venv
 
 # Debug target (with debug symbols and no optimization)
 debug: CXXFLAGS = -std=c++17 -Wall -Wextra -g -DDEBUG
@@ -92,13 +137,43 @@ $(OBJDIR)/controller_game_controller.o: controller/game_controller.cpp controlle
 help:
 	@echo "Available targets:"
 	@echo "  all          - Build all executables (default)"
-	@echo "  run          - Build and run main sudoku program"
+	@echo "  run          - Build and run console sudoku game"
+	@echo "  run-api      - Build and test API executable"
+	@echo "  venv         - Create Python virtual environment with Flask"
+	@echo "  run-server   - Start web API bridge server (auto-creates venv)"
 	@echo "  run-test-grid - Build and run grid operator tests"
 	@echo "  run-test-board - Build and run board architecture tests"
-	@echo "  clean        - Remove all build files"
+	@echo "  clean        - Remove build files only"
+	@echo "  clean-all    - Remove build files AND Python venv"
 	@echo "  debug        - Build with debug symbols"
 	@echo "  release      - Build optimized release version"
 	@echo "  help         - Show this help message"
+	@echo ""
+	@echo "🌐 For Web UI (recommended):"
+	@echo "  1. make run-server      # Creates venv, installs Flask, starts server"
+	@echo "  2. Open web/index.html in browser"
+	@echo "  3. Enjoy your beautiful Sudoku game! 🎯"
+
+# Web server targets
+run-server: $(API_TARGET)
+	@if [ ! -d "venv" ]; then \
+		echo "🐍 Creating Python virtual environment..."; \
+		python3 -m venv venv; \
+		echo "📦 Installing Flask and dependencies..."; \
+		./venv/bin/pip install flask flask-cors; \
+		echo "✅ Virtual environment created!"; \
+	fi
+	@echo "🚀 Starting API Bridge Server..."
+	@echo "🌐 Server will run on http://localhost:5000"
+	@echo "📂 Open web/index.html in your browser"
+	cd api && ../venv/bin/python bridge_server.py
+
+venv:
+	@echo "🐍 Creating Python virtual environment..."
+	python3 -m venv venv
+	@echo "📦 Installing Flask and dependencies..."
+	./venv/bin/pip install flask flask-cors
+	@echo "✅ Virtual environment created with Flask!"
 
 # Phony targets
-.PHONY: all clean run run-test-grid run-test-board debug release help
+.PHONY: all clean clean-all run run-api run-server run-server-simple venv run-test-grid run-test-board debug release help
