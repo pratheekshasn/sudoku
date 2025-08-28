@@ -11,7 +11,7 @@ BINDIR = bin
 
 # Source files
 MODEL_SOURCES = $(SRCDIR)/cell.cpp $(SRCDIR)/grid.cpp $(SRCDIR)/board.cpp
-VIEW_SOURCES = view/console_view.cpp
+VIEW_SOURCES = view/console_view.cpp view/web_view.cpp
 CONTROLLER_SOURCES = controller/game_controller.cpp
 API_SOURCES = api/json_api.cpp
 SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES) $(API_SOURCES)
@@ -80,19 +80,17 @@ run-api: $(API_TARGET)
 # Python virtual environment setup
 venv:
 	@echo "🐍 Creating Python virtual environment..."
-	python3 -m venv venv
-	@echo "📦 Installing Flask and dependencies..."
-	./venv/bin/pip install flask flask-cors
-	@echo "✅ Virtual environment created! Use 'make run-server' to start."
-
-run-server: $(API_TARGET)
 	@if [ ! -d "venv" ]; then \
-		echo "🐍 Creating Python virtual environment..."; \
 		python3 -m venv venv; \
-		echo "📦 Installing Flask and dependencies..."; \
-		./venv/bin/pip install flask flask-cors; \
-		echo "✅ Virtual environment created!"; \
+	else \
+		echo "📁 Virtual environment already exists"; \
 	fi
+	@echo "📦 Installing/updating Flask and dependencies..."
+	./venv/bin/pip install --upgrade pip
+	./venv/bin/pip install flask flask-cors
+	@echo "✅ Virtual environment ready! Use 'make run-server' to start."
+
+run-server: venv $(API_TARGET)
 	@echo "🚀 Starting API Bridge Server..."
 	@echo "🌐 Server will run on http://localhost:5000"
 	@echo "📂 Open web/index.html in your browser"
@@ -131,7 +129,8 @@ $(OBJDIR)/cell.o: $(SRCDIR)/cell.cpp $(SRCDIR)/cell.h
 $(OBJDIR)/grid.o: $(SRCDIR)/grid.cpp $(SRCDIR)/grid.h $(SRCDIR)/cell.h
 $(OBJDIR)/board.o: $(SRCDIR)/board.cpp $(SRCDIR)/board.h $(SRCDIR)/grid.h $(SRCDIR)/cell.h
 $(OBJDIR)/view_console_view.o: view/console_view.cpp view/console_view.h $(SRCDIR)/board.h
-$(OBJDIR)/controller_game_controller.o: controller/game_controller.cpp controller/game_controller.h $(SRCDIR)/board.h view/console_view.h
+$(OBJDIR)/view_web_view.o: view/web_view.cpp view/web_view.h view/sudoku_view.h $(SRCDIR)/board.h
+$(OBJDIR)/controller_game_controller.o: controller/game_controller.cpp controller/game_controller.h $(SRCDIR)/board.h view/console_view.h view/web_view.h view/sudoku_view.h
 
 # Help target
 help:
@@ -153,27 +152,6 @@ help:
 	@echo "  1. make run-server      # Creates venv, installs Flask, starts server"
 	@echo "  2. Open web/index.html in browser"
 	@echo "  3. Enjoy your beautiful Sudoku game! 🎯"
-
-# Web server targets
-run-server: $(API_TARGET)
-	@if [ ! -d "venv" ]; then \
-		echo "🐍 Creating Python virtual environment..."; \
-		python3 -m venv venv; \
-		echo "📦 Installing Flask and dependencies..."; \
-		./venv/bin/pip install flask flask-cors; \
-		echo "✅ Virtual environment created!"; \
-	fi
-	@echo "🚀 Starting API Bridge Server..."
-	@echo "🌐 Server will run on http://localhost:5000"
-	@echo "📂 Open web/index.html in your browser"
-	cd api && ../venv/bin/python bridge_server.py
-
-venv:
-	@echo "🐍 Creating Python virtual environment..."
-	python3 -m venv venv
-	@echo "📦 Installing Flask and dependencies..."
-	./venv/bin/pip install flask flask-cors
-	@echo "✅ Virtual environment created with Flask!"
 
 # Phony targets
 .PHONY: all clean clean-all run run-api run-server run-server-simple venv run-test-grid run-test-board debug release help

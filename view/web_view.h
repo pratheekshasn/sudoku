@@ -1,19 +1,26 @@
 /*
-Console UI implementation for the Sudoku game.
-Provides text-based interaction through standard input/output.
+Web UI implementation for the Sudoku game.
+Communicates with web frontend through JSON API
 */
 
-#ifndef SUDOKU_VIEW_CONSOLE_VIEW_H
-#define SUDOKU_VIEW_CONSOLE_VIEW_H
+#ifndef WEB_VIEW_H
+#define WEB_VIEW_H
 
 #include "sudoku_view.h"
 #include "../model/board.h"
-#include <iostream>
+#include <queue>
 #include <string>
+#include <nlohmann/json.hpp>
 
-class ConsoleView : public SudokuView {
+class WebView : public SudokuView {
+private:
+    struct Move {
+        int row, col, value;
+    };
+    
 public:
-    ConsoleView();
+    WebView();
+    virtual ~WebView();
     
     // Implement SudokuView interface
     void showWelcome() override;
@@ -32,11 +39,18 @@ public:
     void showHelp() override;
     void clearScreen() override;
     void waitForEnter() override;
+    
+    // Web-specific methods
+    std::string getLastMessage() const;
+    void queueCommand(const std::string& command);
+    void queueMove(int row, int col, int value);
+    nlohmann::json serializeBoardToJson(const Board& board);
+    std::string getGameStateJson(const Board& board, int moveCount);
 
 private:
-    void printBoardBorder();
-    void printSeparator();
-    void printColoredCell(int value);
+    std::string lastMessage;
+    std::queue<std::string> commandQueue;
+    std::queue<Move> moveQueue;
 };
 
-#endif // SUDOKU_VIEW_CONSOLE_VIEW_H
+#endif // SUDOKU_VIEW_WEB_VIEW_H

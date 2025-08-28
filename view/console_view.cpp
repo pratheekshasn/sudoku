@@ -7,9 +7,11 @@ ConsoleView implementation for console-based UI rendering and input.
 #include <iomanip>
 #include <limits>
 
-ConsoleView::ConsoleView() {}
+ConsoleView::ConsoleView() {
+    // Constructor implementation can be empty since default constructor is sufficient
+}
 
-void ConsoleView::showWelcome() const {
+void ConsoleView::showWelcome() {
     clearScreen();
     std::cout << "╔══════════════════════════════════════╗\n";
     std::cout << "║        Interactive Sudoku Game       ║\n";
@@ -17,7 +19,7 @@ void ConsoleView::showWelcome() const {
     std::cout << "╚══════════════════════════════════════╝\n\n";
 }
 
-void ConsoleView::showHelp() const {
+void ConsoleView::showHelp() {
     std::cout << "\n╔═══════════ SUDOKU HELP ══════════════╗\n";
     std::cout << "║ Goal: Fill the 9×9 grid so that each ║\n";
     std::cout << "║ row, column, and 3×3 subgrid contains║\n";
@@ -36,7 +38,7 @@ void ConsoleView::showHelp() const {
     std::cout << "╚═══════════════════════════════════════╝\n";
 }
 
-void ConsoleView::showGameStatus(const Board& board, int moveCount) const {
+void ConsoleView::showGameStatus(const Board& board, int moveCount) {
     std::cout << "\n📊 Status: ";
     if (board.isComplete()) {
         if (board.isValid()) {
@@ -54,7 +56,7 @@ void ConsoleView::showGameStatus(const Board& board, int moveCount) const {
     std::cout << " | 🎯 Moves: " << moveCount << std::endl;
 }
 
-void ConsoleView::showBoard(const Board& board) const {
+void ConsoleView::showBoard(const Board& board) {
     for (int row = 0; row < board.getBoardSize(); ++row) {
         for (int col = 0; col < board.getBoardSize(); ++col) {
             int value = board.getCell(row, col).getValue();
@@ -64,7 +66,7 @@ void ConsoleView::showBoard(const Board& board) const {
     }
 }
 
-void ConsoleView::showBoardWithCoordinates(const Board& board) const {
+void ConsoleView::showBoardWithCoordinates(const Board& board) {
     std::cout << "\n    1 2 3   4 5 6   7 8 9\n";
     std::cout << "  ┌───────┬───────┬───────┐\n";
     
@@ -96,19 +98,19 @@ void ConsoleView::showBoardWithCoordinates(const Board& board) const {
     std::cout << "  └───────┴───────┴───────┘\n";
 }
 
-void ConsoleView::showMessage(const std::string& message) const {
+void ConsoleView::showMessage(const std::string& message) {
     std::cout << "💬 " << message << std::endl;
 }
 
-void ConsoleView::showError(const std::string& error) const {
+void ConsoleView::showError(const std::string& error) {
     std::cout << "❌ Error: " << error << std::endl;
 }
 
-void ConsoleView::showSuccess(const std::string& message) const {
+void ConsoleView::showSuccess(const std::string& message) {
     std::cout << "✅ " << message << std::endl;
 }
 
-void ConsoleView::showWinMessage(int moveCount) const {
+void ConsoleView::showWinMessage(int moveCount) {
     clearScreen();
     std::cout << "╔══════════════════════════════════════╗\n";
     std::cout << "║            🎉 CONGRATULATIONS! 🎉    ║\n";
@@ -121,7 +123,7 @@ void ConsoleView::showWinMessage(int moveCount) const {
     std::cout << "╚══════════════════════════════════════╝\n\n";
 }
 
-std::string ConsoleView::getCommand() const {
+std::string ConsoleView::getCommand() {
     std::cout << "\n🎮 Commands: [m]ove, [h]elp, [c]lear, [l]oad, [q]uit\n";
     std::cout << "Enter command: ";
     
@@ -134,7 +136,7 @@ std::string ConsoleView::getCommand() const {
     return command;
 }
 
-bool ConsoleView::getMove(int& row, int& col, int& value) const {
+bool ConsoleView::getMove(int& row, int& col, int& value) {
     std::cout << "\n🎯 Enter your move:\n";
     
     std::cout << "Row (1-9): ";
@@ -164,21 +166,21 @@ bool ConsoleView::getMove(int& row, int& col, int& value) const {
     return true;
 }
 
-void ConsoleView::clearScreen() const {
+void ConsoleView::clearScreen() {
     // Clear screen (works on most terminals)
     std::cout << "\033[2J\033[1;1H";
 }
 
-void ConsoleView::waitForEnter() const {
+void ConsoleView::waitForEnter() {
     std::cout << "\n⏸️  Press Enter to continue...";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     std::cin.get();
 }
 
-void ConsoleView::printSeparator() const {
+void ConsoleView::printSeparator() {
     std::cout << "────────────────────────────────────────\n";
 }
 
-void ConsoleView::printBoardBorder() const {
+void ConsoleView::printBoardBorder() {
     std::cout << "┌───────┬───────┬───────┐\n";
 }

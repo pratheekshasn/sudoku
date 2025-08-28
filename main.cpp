@@ -1,6 +1,6 @@
 /*
 Main entry point for the Interactive Sudoku Game.
-Uses MVC architecture: Model (Board/Grid/Cell), View (ConsoleView), Controller (GameController)
+Uses MVC architecture: Model (Board/Grid/Cell), View (SudokuView interface), Controller (GameController)
 */
 
 #include <iostream>
@@ -8,8 +8,9 @@ Uses MVC architecture: Model (Board/Grid/Cell), View (ConsoleView), Controller (
 
 int main() {
     try {
-        GameController game(3);  // Create a standard 9x9 Sudoku game
-        game.startGame();        // Start the interactive game with MVC architecture
+        // Create a console-based Sudoku game using the factory method
+        auto game = GameController::createConsoleGame(3);
+        game->startGame();        // Start the interactive game with MVC architecture
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
