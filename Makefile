@@ -42,11 +42,11 @@ $(MAIN_TARGET): main.cpp $(OBJECTS) | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) main.cpp $(OBJECTS) -o $@
 
 # Test executables
-$(TEST_GRID_TARGET): test_grid_operators.cpp $(OBJECTS) | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) test_grid_operators.cpp $(OBJECTS) -o $@
+$(TEST_GRID_TARGET): tests/test_grid_operators.cpp $(OBJECTS) | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) tests/test_grid_operators.cpp $(OBJECTS) -o $@
 
-$(TEST_BOARD_TARGET): test_board_architecture.cpp $(OBJECTS) | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) test_board_architecture.cpp $(OBJECTS) -o $@
+$(TEST_BOARD_TARGET): tests/test_board_architecture.cpp $(OBJECTS) | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) tests/test_board_architecture.cpp $(OBJECTS) -o $@
 
 # Run targets
 run: $(MAIN_TARGET)
