@@ -73,6 +73,10 @@ bool GameController::handleCommand(const std::string& command) {
         loadSamplePuzzle();
         return true;
     }
+    else if (command == "g" || command == "generate") {
+        generateNewPuzzle();
+        return true;
+    }
     else {
         view->showError("Invalid command. Type 'h' for help.");
         return false;
@@ -152,6 +156,18 @@ void GameController::clearBoard() {
     }
     moveCount = 0;
     view->showSuccess("Board cleared!");
+}
+
+void GameController::generateNewPuzzle(SudokuGenerator::Difficulty difficulty) {
+    view->showMessage("🎲 Generating new puzzle... Please wait...");
+    
+    if (generator.generatePuzzle(board, difficulty)) {
+        moveCount = 0;
+        view->showSuccess("✨ New puzzle generated! Enjoy solving!");
+    } else {
+        view->showError("❌ Failed to generate puzzle. Loading sample puzzle instead.");
+        loadSamplePuzzle();
+    }
 }
 
 bool GameController::isGameWon() const {

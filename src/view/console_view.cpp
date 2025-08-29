@@ -26,11 +26,12 @@ void ConsoleView::showHelp() {
     std::cout << "║ all digits from 1 to 9.              ║\n";
     std::cout << "║                                       ║\n";
     std::cout << "║ Commands:                             ║\n";
-    std::cout << "║  m, move  - Make a move               ║\n";
-    std::cout << "║  h, help  - Show this help            ║\n";
-    std::cout << "║  c, clear - Clear the board           ║\n";
-    std::cout << "║  l, load  - Load a puzzle             ║\n";
-    std::cout << "║  q, quit  - Exit the game             ║\n";
+    std::cout << "║  m, move     - Make a move            ║\n";
+    std::cout << "║  g, generate - Generate new puzzle    ║\n";
+    std::cout << "║  h, help     - Show this help         ║\n";
+    std::cout << "║  c, clear    - Clear the board        ║\n";
+    std::cout << "║  l, load     - Load sample puzzle     ║\n";
+    std::cout << "║  q, quit     - Exit the game          ║\n";
     std::cout << "║                                       ║\n";
     std::cout << "║ Input format for moves:               ║\n";
     std::cout << "║  Row: 1-9, Col: 1-9, Value: 1-9      ║\n";
@@ -124,7 +125,7 @@ void ConsoleView::showWinMessage(int moveCount) {
 }
 
 std::string ConsoleView::getCommand() {
-    std::cout << "\n🎮 Commands: [m]ove, [h]elp, [c]lear, [l]oad, [q]uit\n";
+    std::cout << "\n🎮 Commands: [m]ove, [g]enerate, [h]elp, [c]lear, [l]oad, [q]uit\n";
     std::cout << "Enter command: ";
     
     std::string command;

@@ -7,6 +7,7 @@ Implements the game logic and flow control with pluggable view backends.
 #define SUDOKU_CONTROLLER_GAME_CONTROLLER_H
 
 #include "../model/board.h"
+#include "../model/sudoku_generator.h"
 #include "../view/sudoku_view.h"
 #include <memory>
 
@@ -27,6 +28,7 @@ public:
     bool handleCommand(const std::string& command);
     bool makeMove();
     void loadSamplePuzzle();
+    void generateNewPuzzle(SudokuGenerator::Difficulty difficulty = SudokuGenerator::MEDIUM);
     void clearBoard();
     
     // Game state
@@ -42,6 +44,7 @@ public:
 private:
     Board board;
     std::unique_ptr<SudokuView> view;
+    SudokuGenerator generator;
     int moveCount;
     bool gameRunning;
     

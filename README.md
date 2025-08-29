@@ -33,24 +33,6 @@ make run
 sudo apt update && sudo apt install -y nlohmann-json3-dev
 ```
 
-## How to use
-
-# Build everything
-make all
-
-# Run console version
-make run
-
-# Test WebView interface
-make test-webview
-
-# Clean build files
-make clean
-
-# See all options
-make help
-
-
 ## How to Play 🎲
 
 ### Commands:
