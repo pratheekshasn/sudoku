@@ -44,6 +44,15 @@ std::string SudokuJsonApi::processCommand(const std::string& command, const std:
         else if (command == "validate") {
             return validateBoard();
         }
+        else if (command == "solve_puzzle") {
+            return solvePuzzle(params);
+        }
+        else if (command == "get_ai_move") {
+            return getNextAIMove(params);
+        }
+        else if (command == "get_ai_moves") {
+            return getAIPossibleMoves(params);
+        }
         else {
             return createResponse(false, "Unknown command: " + command);
         }
@@ -151,6 +160,102 @@ std::string SudokuJsonApi::validateBoard() {
     std::ostringstream oss;
     oss << "{\"valid\":" << (isValid ? "true" : "false") << "}";
     return createResponse(true, "Board validated", oss.str());
+}
+
+std::string SudokuJsonApi::solvePuzzle(const std::string& solverType) {
+    // Create solver
+    aiSolver = SolverFactory::createSolver(solverType);
+    if (!aiSolver) {
+        return createResponse(false, "Unknown solver type: " + solverType);
+    }
+    
+    // Check if puzzle can be solved
+    if (!aiSolver->canSolve(board)) {
+        return createResponse(false, "Puzzle cannot be solved - invalid state");
+    }
+    
+    // Make a copy of the board to solve
+    Board solutionBoard = board;
+    
+    // Solve the puzzle
+    bool solved = aiSolver->solve(solutionBoard);
+    
+    if (solved) {
+        // Update the board with solution
+        board = solutionBoard;
+        saveState();
+        
+        std::ostringstream result;
+        result << "{"
+               << "\"solved\":true,"
+               << "\"solver\":\"" << aiSolver->getSolverName() << "\","
+               << "\"moves\":" << aiSolver->getMovesCount() << ","
+               << "\"time_ms\":" << aiSolver->getSolveTimeMs() << ","
+               << "\"board\":" << boardToJson()
+               << "}";
+        
+        return createResponse(true, "Puzzle solved successfully", result.str());
+    } else {
+        return createResponse(false, "Could not solve puzzle - no solution found");
+    }
+}
+
+std::string SudokuJsonApi::getNextAIMove(const std::string& solverType) {
+    // Create solver if not exists
+    if (!aiSolver || aiSolver->getSolverName().find(solverType) == std::string::npos) {
+        aiSolver = SolverFactory::createSolver(solverType);
+        if (!aiSolver) {
+            return createResponse(false, "Unknown solver type: " + solverType);
+        }
+    }
+    
+    SolverMove move(0, 0, 0);
+    bool hasMove = aiSolver->getNextMove(board, move);
+    
+    if (hasMove) {
+        std::ostringstream result;
+        result << "{"
+               << "\"row\":" << (move.row + 1) << ","  // Convert to 1-based
+               << "\"col\":" << (move.col + 1) << ","  // Convert to 1-based
+               << "\"value\":" << move.value << ","
+               << "\"reasoning\":\"" << escapeJson(move.reasoning) << "\","
+               << "\"confidence\":" << move.confidence
+               << "}";
+        
+        return createResponse(true, "Next AI move found", result.str());
+    } else {
+        return createResponse(false, "No AI move available - puzzle may be complete or unsolvable");
+    }
+}
+
+std::string SudokuJsonApi::getAIPossibleMoves(const std::string& solverType) {
+    // Create solver if not exists
+    if (!aiSolver || aiSolver->getSolverName().find(solverType) == std::string::npos) {
+        aiSolver = SolverFactory::createSolver(solverType);
+        if (!aiSolver) {
+            return createResponse(false, "Unknown solver type: " + solverType);
+        }
+    }
+    
+    std::vector<SolverMove> moves = aiSolver->getAllPossibleMoves(board);
+    
+    std::ostringstream result;
+    result << "{\"moves\":[";
+    
+    for (size_t i = 0; i < moves.size(); ++i) {
+        if (i > 0) result << ",";
+        result << "{"
+               << "\"row\":" << (moves[i].row + 1) << ","  // Convert to 1-based
+               << "\"col\":" << (moves[i].col + 1) << ","  // Convert to 1-based
+               << "\"value\":" << moves[i].value << ","
+               << "\"reasoning\":\"" << escapeJson(moves[i].reasoning) << "\","
+               << "\"confidence\":" << moves[i].confidence
+               << "}";
+    }
+    
+    result << "],\"count\":" << moves.size() << "}";
+    
+    return createResponse(true, "AI possible moves retrieved", result.str());
 }
 
 std::string SudokuJsonApi::boardToJson() {

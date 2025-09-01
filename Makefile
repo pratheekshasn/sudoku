@@ -10,6 +10,7 @@ MODELDIR = $(SRCDIR)/model
 VIEWDIR = $(SRCDIR)/view
 CONTROLLERDIR = $(SRCDIR)/controller
 APIDIR = $(SRCDIR)/api
+SOLVERDIR = $(SRCDIR)/solver
 TESTDIR = tests
 BUILDDIR = build
 OBJDIR = $(BUILDDIR)/obj
@@ -19,15 +20,17 @@ BINDIR = $(BUILDDIR)/bin
 MODEL_SOURCES = $(MODELDIR)/cell.cpp $(MODELDIR)/grid.cpp $(MODELDIR)/board.cpp $(MODELDIR)/sudoku_generator.cpp
 VIEW_SOURCES = $(VIEWDIR)/console_view.cpp $(VIEWDIR)/web_view.cpp
 CONTROLLER_SOURCES = $(CONTROLLERDIR)/game_controller.cpp
+SOLVER_SOURCES = $(SOLVERDIR)/solver_interface.cpp $(SOLVERDIR)/backtrack_solver.cpp $(SOLVERDIR)/constraint_solver.cpp $(SOLVERDIR)/solver_factory.cpp
 API_SOURCES = $(APIDIR)/json_api.cpp
-SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES) $(API_SOURCES)
+SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES) $(SOLVER_SOURCES) $(API_SOURCES)
 
 # Object files
 MODEL_OBJECTS = $(MODEL_SOURCES:$(MODELDIR)/%.cpp=$(OBJDIR)/model_%.o)
 VIEW_OBJECTS = $(VIEW_SOURCES:$(VIEWDIR)/%.cpp=$(OBJDIR)/view_%.o)
 CONTROLLER_OBJECTS = $(CONTROLLER_SOURCES:$(CONTROLLERDIR)/%.cpp=$(OBJDIR)/controller_%.o)
+SOLVER_OBJECTS = $(SOLVER_SOURCES:$(SOLVERDIR)/%.cpp=$(OBJDIR)/solver_%.o)
 API_OBJECTS = $(API_SOURCES:$(APIDIR)/%.cpp=$(OBJDIR)/api_%.o)
-OBJECTS = $(MODEL_OBJECTS) $(VIEW_OBJECTS) $(CONTROLLER_OBJECTS)
+OBJECTS = $(MODEL_OBJECTS) $(VIEW_OBJECTS) $(CONTROLLER_OBJECTS) $(SOLVER_OBJECTS)
 
 # Main targets
 MAIN_TARGET = $(BINDIR)/sudoku
@@ -62,13 +65,17 @@ $(OBJDIR)/controller_%.o: $(CONTROLLERDIR)/%.cpp | $(OBJDIR)
 $(OBJDIR)/api_%.o: $(APIDIR)/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
+# Compile solver files
+$(OBJDIR)/solver_%.o: $(SOLVERDIR)/%.cpp | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
 # Main executable
 $(MAIN_TARGET): $(SRCDIR)/main.cpp $(OBJECTS) | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(SRCDIR)/main.cpp $(OBJECTS) -o $@
 
 # API executable (doesn't need view layer)
-$(API_TARGET): $(APIDIR)/api_main.cpp $(MODEL_OBJECTS) $(API_OBJECTS) | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $(APIDIR)/api_main.cpp $(MODEL_OBJECTS) $(API_OBJECTS) -o $@
+$(API_TARGET): $(APIDIR)/api_main.cpp $(MODEL_OBJECTS) $(SOLVER_OBJECTS) $(API_OBJECTS) | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(APIDIR)/api_main.cpp $(MODEL_OBJECTS) $(SOLVER_OBJECTS) $(API_OBJECTS) -o $@
 
 # Test executables
 $(TEST_GRID_TARGET): $(TESTDIR)/test_grid_operators.cpp $(OBJECTS) | $(BINDIR)

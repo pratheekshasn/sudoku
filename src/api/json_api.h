@@ -8,6 +8,8 @@ Provides a command-line interface that outputs JSON for easy integration with we
 
 #include "../model/board.h"
 #include "../model/sudoku_generator.h"
+#include "../solver/solver_interface.h"
+#include "../solver/solver_factory.h"
 #include <string>
 #include <sstream>
 
@@ -27,9 +29,15 @@ public:
     std::string getStatus();
     std::string validateBoard();
     
+    // AI Solver commands
+    std::string solvePuzzle(const std::string& solverType = "backtrack");
+    std::string getNextAIMove(const std::string& solverType = "backtrack");
+    std::string getAIPossibleMoves(const std::string& solverType = "backtrack");
+    
 private:
     Board board;
     SudokuGenerator generator;
+    std::unique_ptr<SudokuSolver> aiSolver;
     int moveCount;
     
     // JSON formatting helpers

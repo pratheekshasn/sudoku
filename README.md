@@ -33,6 +33,21 @@ make run
 sudo apt update && sudo apt install -y nlohmann-json3-dev
 ```
 
+## Extending code
+
+🚀 Next Steps:
+You can now easily add even more solvers:
+
+Neural Network Solver (true AI using machine learning)
+Heuristic Solver (advanced techniques like X-Wing, Swordfish)
+Competition Solver (speed-optimized for contests)
+Each solver you create automatically becomes available through:
+
+get_ai_move <solver_name>
+get_ai_moves <solver_name>
+solve_puzzle <solver_name>
+
+
 ## How to Play 🎲
 
 ### Commands:

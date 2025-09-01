@@ -8,6 +8,8 @@ Implements the game logic and flow control with pluggable view backends.
 
 #include "../model/board.h"
 #include "../model/sudoku_generator.h"
+#include "../solver/solver_interface.h"
+#include "../solver/solver_factory.h"
 #include "../view/sudoku_view.h"
 #include <memory>
 
@@ -31,6 +33,13 @@ public:
     void generateNewPuzzle(SudokuGenerator::Difficulty difficulty = SudokuGenerator::MEDIUM);
     void clearBoard();
     
+    // AI Solver integration
+    bool solvePuzzle(SolverType solverType = SolverType::BACKTRACK);
+    bool getNextAIMove();
+    bool enableStepByStepSolving(SolverType solverType = SolverType::BACKTRACK);
+    void disableStepByStepSolving();
+    std::vector<SolverMove> getAIPossibleMoves() const;
+    
     // Game state
     bool isGameWon() const;
     void checkGameState();
@@ -45,8 +54,10 @@ private:
     Board board;
     std::unique_ptr<SudokuView> view;
     SudokuGenerator generator;
+    std::unique_ptr<SudokuSolver> aiSolver;
     int moveCount;
     bool gameRunning;
+    bool stepByStepMode;
     
     // Helper methods
     bool isValidMove(int row, int col, int value) const;
