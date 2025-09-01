@@ -12,7 +12,7 @@ def call_cpp_api(command, params=""):
     """Call the C++ API and return parsed JSON response"""
     try:
         # Path to compiled C++ API executable
-        api_path = "../bin/sudoku_api"
+        api_path = "../../build/bin/sudoku_api"
         
         if not os.path.exists(api_path):
             return {"success": False, "message": "C++ API not found. Run 'make api' first."}
@@ -57,6 +57,15 @@ def make_move():
 def load_puzzle():
     """Load a new puzzle using C++ backend"""
     response = call_cpp_api("load_puzzle")
+    return jsonify(response)
+
+@app.route('/api/generate', methods=['POST'])
+def generate_puzzle():
+    """Generate a new puzzle with specified difficulty using C++ backend"""
+    data = request.json
+    difficulty = data.get('difficulty', 'medium')  # Default to medium
+    
+    response = call_cpp_api("generate_puzzle", difficulty)
     return jsonify(response)
 
 @app.route('/api/clear', methods=['POST'])

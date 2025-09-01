@@ -104,7 +104,7 @@ run-server: venv $(API_TARGET)
 	@echo "🚀 Starting API Bridge Server..."
 	@echo "🌐 Server will run on http://localhost:5000"
 	@echo "📂 Open web/index.html in your browser"
-	cd $(APIDIR) && ../../../venv/bin/python bridge_server.py
+	cd $(APIDIR) && ../../venv/bin/python bridge_server.py
 
 # Alternative: run server without auto-creating venv
 run-server-simple: $(API_TARGET)

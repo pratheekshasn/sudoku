@@ -224,7 +224,14 @@
         </div>
         
         <div class="controls">
-            <button class="btn btn-success" onclick="loadPuzzle()">New Puzzle</button>
+            <button class="btn btn-success" onclick="loadPuzzle()">Sample Puzzle</button>
+            <select id="difficultySelect" style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; margin-right: 10px;">
+                <option value="easy">Easy</option>
+                <option value="medium" selected>Medium</option>
+                <option value="hard">Hard</option>
+                <option value="expert">Expert</option>
+            </select>
+            <button class="btn btn-success" onclick="generatePuzzle()">🎲 Generate</button>
             <button class="btn btn-secondary" onclick="clearBoard()">Clear Board</button>
             <button class="btn btn-primary" onclick="validateBoard()">Validate</button>
             <button class="btn btn-danger" onclick="resetGame()">Reset</button>
@@ -467,6 +474,40 @@
         
         function checkComplete() {
             return gameBoard.every(row => row.every(cell => cell !== 0));
+        }
+        
+        async function generatePuzzle() {
+            const difficulty = document.getElementById('difficultySelect').value;
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        difficulty: difficulty
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    gameBoard = result.data;
+                    updateDisplay();
+                    await updateGameStatus();
+                    
+                    // Show success message
+                    const status = document.getElementById('gameStatus');
+                    status.textContent = `🎲 New ${difficulty} puzzle generated!`;
+                    status.className = 'status valid';
+                } else {
+                    alert('❌ Failed to generate puzzle: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error generating puzzle:', error);
+                alert('🔌 Connection error! Make sure the server is running.');
+            }
         }
         
         async function loadPuzzle() {

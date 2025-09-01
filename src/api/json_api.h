@@ -7,6 +7,7 @@ Provides a command-line interface that outputs JSON for easy integration with we
 #define SUDOKU_JSON_API_H
 
 #include "../model/board.h"
+#include "../model/sudoku_generator.h"
 #include <string>
 #include <sstream>
 
@@ -21,12 +22,14 @@ public:
     std::string getBoard();
     std::string makeMove(int row, int col, int value);
     std::string loadPuzzle();
+    std::string generatePuzzle(const std::string& difficulty = "medium");
     std::string clearBoard();
     std::string getStatus();
     std::string validateBoard();
     
 private:
     Board board;
+    SudokuGenerator generator;
     int moveCount;
     
     // JSON formatting helpers
@@ -34,6 +37,11 @@ private:
     std::string createResponse(bool success, const std::string& message, const std::string& data = "");
     std::string escapeJson(const std::string& str);
     void initializeSamplePuzzle();
+    
+    // State persistence
+    void saveState();
+    void loadState();
+    void parseBoardFromJson(const std::string& jsonData);
 };
 
 #endif // SUDOKU_JSON_API_H

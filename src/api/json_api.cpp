@@ -5,10 +5,11 @@ JSON API Implementation for C++ Sudoku Game
 #include "json_api.h"
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 
 SudokuJsonApi::SudokuJsonApi() : board(3), moveCount(0) {
-    // Initialize with a sample puzzle
-    initializeSamplePuzzle();
+    // Load existing state or initialize with sample puzzle
+    loadState();
 }
 
 std::string SudokuJsonApi::processCommand(const std::string& command, const std::string& params) {
@@ -30,6 +31,9 @@ std::string SudokuJsonApi::processCommand(const std::string& command, const std:
         }
         else if (command == "load_puzzle") {
             return loadPuzzle();
+        }
+        else if (command == "generate_puzzle") {
+            return generatePuzzle(params);
         }
         else if (command == "clear_board") {
             return clearBoard();
@@ -58,7 +62,8 @@ std::string SudokuJsonApi::makeMove(int row, int col, int value) {
     // Convert to 0-based indexing
     row--; col--;
     
-    if (row < 0 || row >= 9 || col < 0 || col >= 9 || value < 0 || value > 9) {
+    int size = board.getBoardSize();
+    if (row < 0 || row >= size || col < 0 || col >= size || value < 0 || value > size) {
         return createResponse(false, "Invalid move parameters");
     }
     
@@ -75,6 +80,7 @@ std::string SudokuJsonApi::makeMove(int row, int col, int value) {
     }
     
     moveCount++;
+    saveState(); // Persist state after each move
     
     std::string message = value == 0 ? "Cell cleared" : "Move made successfully";
     std::string boardJson = boardToJson();
@@ -85,8 +91,33 @@ std::string SudokuJsonApi::makeMove(int row, int col, int value) {
 std::string SudokuJsonApi::loadPuzzle() {
     initializeSamplePuzzle();
     moveCount = 0;
+    saveState(); // Persist the loaded puzzle
     std::string boardJson = boardToJson();
     return createResponse(true, "Puzzle loaded", boardJson);
+}
+
+std::string SudokuJsonApi::generatePuzzle(const std::string& difficulty) {
+    // Parse difficulty parameter
+    SudokuGenerator::Difficulty diff = SudokuGenerator::MEDIUM;
+    if (difficulty == "easy") diff = SudokuGenerator::EASY;
+    else if (difficulty == "medium") diff = SudokuGenerator::MEDIUM;
+    else if (difficulty == "hard") diff = SudokuGenerator::HARD;
+    else if (difficulty == "expert") diff = SudokuGenerator::EXPERT;
+    
+    // Generate a complete grid first
+    if (!generator.generateCompleteGrid(board)) {
+        return createResponse(false, "Failed to generate complete grid");
+    }
+    
+    // Then create the puzzle by removing cells
+    if (!generator.generatePuzzle(board, diff)) {
+        return createResponse(false, "Failed to generate puzzle");
+    }
+    
+    moveCount = 0;
+    saveState(); // Persist the generated puzzle
+    std::string boardJson = boardToJson();
+    return createResponse(true, "New puzzle generated with " + difficulty + " difficulty", boardJson);
 }
 
 std::string SudokuJsonApi::clearBoard() {
@@ -96,6 +127,7 @@ std::string SudokuJsonApi::clearBoard() {
         }
     }
     moveCount = 0;
+    saveState(); // Persist the cleared board
     std::string boardJson = boardToJson();
     return createResponse(true, "Board cleared", boardJson);
 }
@@ -122,18 +154,19 @@ std::string SudokuJsonApi::validateBoard() {
 }
 
 std::string SudokuJsonApi::boardToJson() {
+    int size = board.getBoardSize();
     std::ostringstream oss;
     oss << "[";
     
-    for (int row = 0; row < 9; row++) {
+    for (int row = 0; row < size; row++) {
         oss << "[";
-        for (int col = 0; col < 9; col++) {
+        for (int col = 0; col < size; col++) {
             int value = board.getCell(row, col).getValue();
             oss << value;
-            if (col < 8) oss << ",";
+            if (col < size - 1) oss << ",";
         }
         oss << "]";
-        if (row < 8) oss << ",";
+        if (row < size - 1) oss << ",";
     }
     
     oss << "]";
@@ -170,7 +203,7 @@ std::string SudokuJsonApi::escapeJson(const std::string& str) {
 }
 
 void SudokuJsonApi::initializeSamplePuzzle() {
-    // Easy Sudoku puzzle
+    // Easy Sudoku puzzle for 9x9 board
     int puzzle[9][9] = {
         {5, 3, 0, 0, 7, 0, 0, 0, 0},
         {6, 0, 0, 1, 9, 5, 0, 0, 0},
@@ -183,9 +216,101 @@ void SudokuJsonApi::initializeSamplePuzzle() {
         {0, 0, 0, 0, 8, 0, 0, 7, 9}
     };
     
-    for (int row = 0; row < 9; ++row) {
-        for (int col = 0; col < 9; ++col) {
-            board.getCell(row, col).setValue(puzzle[row][col]);
+    int size = board.getBoardSize();
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            if (size == 9 && row < 9 && col < 9) {
+                board.getCell(row, col).setValue(puzzle[row][col]);
+            } else {
+                board.getCell(row, col).setValue(0); // Clear for non-9x9 boards
+            }
+        }
+    }
+}
+
+void SudokuJsonApi::saveState() {
+    std::ofstream file("game_state.json");
+    if (!file.is_open()) return;
+    
+    file << "{\n";
+    file << "  \"moveCount\": " << moveCount << ",\n";
+    file << "  \"board\": " << boardToJson() << "\n";
+    file << "}\n";
+    file.close();
+}
+
+void SudokuJsonApi::loadState() {
+    std::ifstream file("game_state.json");
+    if (!file.is_open()) {
+        // No saved state, initialize with sample puzzle
+        initializeSamplePuzzle();
+        return;
+    }
+    
+    std::string line;
+    std::string content;
+    while (std::getline(file, line)) {
+        content += line;
+    }
+    file.close();
+    
+    // Simple JSON parsing for our specific format
+    size_t movePos = content.find("\"moveCount\": ");
+    if (movePos != std::string::npos) {
+        movePos += 13; // Length of "\"moveCount\": "
+        size_t endPos = content.find(",", movePos);
+        if (endPos != std::string::npos) {
+            moveCount = std::stoi(content.substr(movePos, endPos - movePos));
+        }
+    }
+    
+    size_t boardPos = content.find("\"board\": [");
+    if (boardPos != std::string::npos) {
+        boardPos += 10; // Length of "\"board\": ["
+        size_t endPos = content.find("]", boardPos);
+        if (endPos != std::string::npos) {
+            // Find the last closing bracket of the entire board array
+            size_t lastBracket = content.rfind("]");
+            if (lastBracket != std::string::npos) {
+                std::string boardData = content.substr(boardPos - 1, lastBracket - boardPos + 2);
+                
+                // Parse the board data
+                parseBoardFromJson(boardData);
+                return;
+            }
+        }
+    }
+    
+    // Fallback to sample puzzle if parsing fails
+    initializeSamplePuzzle();
+}
+
+void SudokuJsonApi::parseBoardFromJson(const std::string& jsonData) {
+    // Simple parser for our specific board format: [[1,2,3...],[4,5,6...]...]
+    int size = board.getBoardSize();
+    int row = 0, col = 0;
+    bool inNumber = false;
+    std::string currentNumber;
+    
+    for (char c : jsonData) {
+        if (c >= '0' && c <= '9') {
+            if (!inNumber) {
+                inNumber = true;
+                currentNumber = "";
+            }
+            currentNumber += c;
+        } else if (inNumber && (c == ',' || c == ']')) {
+            // End of a number
+            if (row < size && col < size) {
+                board.getCell(row, col).setValue(std::stoi(currentNumber));
+                col++;
+                if (col >= size) {
+                    col = 0;
+                    row++;
+                    if (row >= size) break; // Prevent overflow
+                }
+            }
+            inNumber = false;
         }
     }
 }
