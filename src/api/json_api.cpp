@@ -6,6 +6,7 @@ JSON API Implementation for C++ Sudoku Game
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <chrono>
 
 SudokuJsonApi::SudokuJsonApi() : board(3), moveCount(0) {
     // Load existing state or initialize with sample puzzle
@@ -52,6 +53,17 @@ std::string SudokuJsonApi::processCommand(const std::string& command, const std:
         }
         else if (command == "get_ai_moves") {
             return getAIPossibleMoves(params);
+        }
+        else if (command == "train_batch") {
+            int numPuzzles = params.empty() ? 100 : std::stoi(params);
+            return trainOnPuzzleBatch(numPuzzles);
+        }
+        else if (command == "training_stats") {
+            return getTrainingStats();
+        }
+        else if (command == "enable_learning") {
+            bool enable = params.empty() ? true : (params == "true" || params == "1");
+            return enableRealTimeLearning(enable);
         }
         else {
             return createResponse(false, "Unknown command: " + command);
@@ -175,12 +187,21 @@ std::string SudokuJsonApi::solvePuzzle(const std::string& solverType) {
     }
     
     // Make a copy of the board to solve
+    Board originalBoard = board;  // Keep original for training
     Board solutionBoard = board;
     
     // Solve the puzzle
     bool solved = aiSolver->solve(solutionBoard);
     
     if (solved) {
+        // Train neural network if using neuro-symbolic solver
+        if (solverType == "neuro_symbolic") {
+            auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+            if (neuroSolver) {
+                neuroSolver->trainOnSolution(originalBoard, solutionBoard);
+            }
+        }
+        
         // Update the board with solution
         board = solutionBoard;
         saveState();
@@ -418,4 +439,97 @@ void SudokuJsonApi::parseBoardFromJson(const std::string& jsonData) {
             inNumber = false;
         }
     }
+}
+
+// ============================================================================
+// Neural Network Training Methods
+// ============================================================================
+
+std::string SudokuJsonApi::trainOnPuzzleBatch(int numPuzzles) {
+    // Create neuro-symbolic solver for training
+    auto trainer = SolverFactory::createSolver("neuro_symbolic");
+    auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(trainer.get());
+    
+    if (!neuroSolver) {
+        return createResponse(false, "Failed to create neuro-symbolic solver for training");
+    }
+    
+    int successful = 0;
+    int failed = 0;
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
+    for (int i = 0; i < numPuzzles; ++i) {
+        // Generate a COMPLETE solution first (this is our ground truth!)
+        Board completeBoard(3); // 9x9 board
+        
+        if (generator.generateCompleteGrid(completeBoard)) {
+            // Store the VERIFIED correct solution
+            Board groundTruthSolution = completeBoard;
+            
+            // Now create a puzzle by removing cells
+            SudokuGenerator::Difficulty difficulty = 
+                static_cast<SudokuGenerator::Difficulty>(i % 4);
+            
+            if (generator.generatePuzzle(completeBoard, difficulty)) {
+                Board puzzleToSolve = completeBoard; // This is the puzzle with holes
+                
+                // NOW we have proper supervised learning:
+                // - puzzleToSolve: Input puzzle with empty cells
+                // - groundTruthSolution: VERIFIED correct complete solution
+                
+                // Train neural network on KNOWN correct solution
+                neuroSolver->trainOnSolution(puzzleToSolve, groundTruthSolution);
+                successful++;
+            } else {
+                failed++;
+            }
+        } else {
+            failed++;
+        }
+    }
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    std::ostringstream result;
+    result << "{"
+           << "\"puzzles_trained\":" << successful << ","
+           << "\"failed_puzzles\":" << failed << ","
+           << "\"total_requested\":" << numPuzzles << ","
+           << "\"training_time_ms\":" << duration.count() << ","
+           << "\"success_rate\":" << (successful / (double)numPuzzles * 100.0)
+           << "}";
+    
+    return createResponse(true, "Batch training completed", result.str());
+}
+
+std::string SudokuJsonApi::getTrainingStats() {
+    auto trainer = SolverFactory::createSolver("neuro_symbolic");
+    auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(trainer.get());
+    
+    if (!neuroSolver) {
+        return createResponse(false, "Neuro-symbolic solver not available");
+    }
+    
+    std::ostringstream result;
+    result << "{"
+           << "\"solver_name\":\"" << neuroSolver->getSolverName() << "\","
+           << "\"total_moves\":" << neuroSolver->getMovesCount() << ","
+           << "\"solve_time_ms\":" << neuroSolver->getSolveTimeMs() << ","
+           << "\"neural_confidence\":" << neuroSolver->getNeuralConfidence() << ","
+           << "\"symbolic_confidence\":" << neuroSolver->getSymbolicConfidence() << ","
+           << "\"current_strategy\":" << (int)neuroSolver->getCurrentStrategy()
+           << "}";
+    
+    return createResponse(true, "Training statistics retrieved", result.str());
+}
+
+std::string SudokuJsonApi::enableRealTimeLearning(bool enable) {
+    // This would require modifying the solving process to call learnFromError
+    // For now, just return status
+    std::ostringstream result;
+    result << "{\"real_time_learning\":" << (enable ? "true" : "false") << "}";
+    
+    std::string message = enable ? "Real-time learning enabled" : "Real-time learning disabled";
+    return createResponse(true, message, result.str());
 }

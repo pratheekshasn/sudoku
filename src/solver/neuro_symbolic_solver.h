@@ -90,7 +90,14 @@ private:
 
 class NeuroSymbolicSolver : public SudokuSolver {
 public:
-    NeuroSymbolicSolver(int boardSize = 9);
+    // Hybrid strategy selection
+    enum class Strategy {
+        SYMBOLIC_FIRST,    // Use logic first, neural for ambiguous cases
+        NEURAL_GUIDED,     // Neural guides symbolic search
+        BALANCED_FUSION    // Equal weight to both approaches
+    };
+    
+    explicit NeuroSymbolicSolver(int boardSize = 9);
     
     // Core solving methods
     bool solve(Board& board) override;
@@ -113,9 +120,10 @@ public:
     // Adapt neural network to different board size
     void adaptToBoardSize(int newSize);
     
-    // Performance metrics
+    // Getters for inspection
     double getNeuralConfidence() const { return lastNeuralConfidence; }
     double getSymbolicConfidence() const { return lastSymbolicConfidence; }
+    Strategy getCurrentStrategy() const { return currentStrategy; }
 
 private:
     std::unique_ptr<SudokuNeuralNetwork> neuralNet;
@@ -138,13 +146,6 @@ private:
     double lastSymbolicConfidence = 0.0;
     int correctPredictions = 0;
     int totalPredictions = 0;
-    
-    // Hybrid strategy selection
-    enum class Strategy {
-        SYMBOLIC_FIRST,    // Use logic first, neural for ambiguous cases
-        NEURAL_GUIDED,     // Neural guides symbolic search
-        BALANCED_FUSION    // Equal weight to both approaches
-    };
     
     Strategy currentStrategy = Strategy::BALANCED_FUSION;
 };

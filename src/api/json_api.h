@@ -10,6 +10,7 @@ Provides a command-line interface that outputs JSON for easy integration with we
 #include "../model/sudoku_generator.h"
 #include "../solver/solver_interface.h"
 #include "../solver/solver_factory.h"
+#include "../solver/neuro_symbolic_solver.h"
 #include <string>
 #include <sstream>
 
@@ -33,6 +34,11 @@ public:
     std::string solvePuzzle(const std::string& solverType = "backtrack");
     std::string getNextAIMove(const std::string& solverType = "backtrack");
     std::string getAIPossibleMoves(const std::string& solverType = "backtrack");
+    
+    // Neural Network Training commands
+    std::string trainOnPuzzleBatch(int numPuzzles = 100);
+    std::string getTrainingStats();
+    std::string enableRealTimeLearning(bool enable = true);
     
 private:
     Board board;

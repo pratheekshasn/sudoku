@@ -86,11 +86,17 @@ std::vector<double> SudokuNeuralNetwork::extractFeatures(const Board& board, int
     }
     
     // Position and value features (5 values) - normalized for any board size
-    features.push_back(row / (double)(size - 1));           // Row position (0-1)
-    features.push_back(col / (double)(size - 1));           // Column position (0-1)
+    // Handle edge case: for size=1, avoid division by zero
+    double rowNorm = (size > 1) ? row / (double)(size - 1) : 0.5;
+    double colNorm = (size > 1) ? col / (double)(size - 1) : 0.5;
+    double boxRowNorm = (sqrt(size) > 1) ? (row / static_cast<int>(sqrt(size))) / (sqrt(size) - 1) : 0.5;
+    double boxColNorm = (sqrt(size) > 1) ? (col / static_cast<int>(sqrt(size))) / (sqrt(size) - 1) : 0.5;
+    
+    features.push_back(rowNorm);                            // Row position (0-1)
+    features.push_back(colNorm);                            // Column position (0-1)
     features.push_back(value / (double)size);               // Candidate value (0-1)
-    features.push_back((row / static_cast<int>(sqrt(size))) / (sqrt(size) - 1)); // Box row (0-1)
-    features.push_back((col / static_cast<int>(sqrt(size))) / (sqrt(size) - 1)); // Box col (0-1)
+    features.push_back(boxRowNorm);                         // Box row (0-1)
+    features.push_back(boxColNorm);                         // Box col (0-1)
     
     // Local neighborhood density (4 values)
     int filledNeighbors = 0;
