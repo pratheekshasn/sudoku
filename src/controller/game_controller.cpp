@@ -205,30 +205,39 @@ bool GameController::isValidMove(int row, int col, int value) const {
 }
 
 void GameController::initializeSamplePuzzle() {
-    // Easy Sudoku puzzle (works for 9x9 boards)
-    if (board.getBoardSize() == 9) {
-        std::vector<std::vector<int>> puzzle = {
-            {5, 3, 0, 0, 7, 0, 0, 0, 0},
-            {6, 0, 0, 1, 9, 5, 0, 0, 0},
-            {0, 9, 8, 0, 0, 0, 0, 6, 0},
-            {8, 0, 0, 0, 6, 0, 0, 0, 3},
-            {4, 0, 0, 8, 0, 3, 0, 0, 1},
-            {7, 0, 0, 0, 2, 0, 0, 0, 6},
-            {0, 6, 0, 0, 0, 0, 2, 8, 0},
-            {0, 0, 0, 4, 1, 9, 0, 0, 5},
-            {0, 0, 0, 0, 8, 0, 0, 7, 9}
-        };
-        
-        for (int row = 0; row < board.getBoardSize(); ++row) {
-            for (int col = 0; col < board.getBoardSize(); ++col) {
-                board.getCell(row, col).setValue(puzzle[row][col]);
-            }
-        }
+    // Generate a random puzzle instead of using the same one every time
+    view->showMessage("🎲 Generating a fresh puzzle for you... Please wait...");
+    
+    if (generator.generatePuzzle(board, SudokuGenerator::Difficulty::EASY)) {
+        view->showSuccess("✨ New puzzle generated! Enjoy solving!");
     } else {
-        // For non-9x9 boards, just clear the board
-        for (int row = 0; row < board.getBoardSize(); ++row) {
-            for (int col = 0; col < board.getBoardSize(); ++col) {
-                board.getCell(row, col).setValue(0);
+        // Fallback to hardcoded puzzle if generation fails
+        view->showMessage("⚠️  Generation failed, loading sample puzzle...");
+        
+        if (board.getBoardSize() == 9) {
+            std::vector<std::vector<int>> puzzle = {
+                {5, 3, 0, 0, 7, 0, 0, 0, 0},
+                {6, 0, 0, 1, 9, 5, 0, 0, 0},
+                {0, 9, 8, 0, 0, 0, 0, 6, 0},
+                {8, 0, 0, 0, 6, 0, 0, 0, 3},
+                {4, 0, 0, 8, 0, 3, 0, 0, 1},
+                {7, 0, 0, 0, 2, 0, 0, 0, 6},
+                {0, 6, 0, 0, 0, 0, 2, 8, 0},
+                {0, 0, 0, 4, 1, 9, 0, 0, 5},
+                {0, 0, 0, 0, 8, 0, 0, 7, 9}
+            };
+            
+            for (int row = 0; row < board.getBoardSize(); ++row) {
+                for (int col = 0; col < board.getBoardSize(); ++col) {
+                    board.getCell(row, col).setValue(puzzle[row][col]);
+                }
+            }
+        } else {
+            // For non-9x9 boards, just clear the board
+            for (int row = 0; row < board.getBoardSize(); ++row) {
+                for (int col = 0; col < board.getBoardSize(); ++col) {
+                    board.getCell(row, col).setValue(0);
+                }
             }
         }
     }
