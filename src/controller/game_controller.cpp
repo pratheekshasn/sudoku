@@ -7,7 +7,7 @@ GameController implementation for coordinating game logic and UI.
 #include "../view/web_view.h"
 
 GameController::GameController(std::unique_ptr<SudokuView> view, int gridSize) 
-    : board(gridSize), view(std::move(view)), moveCount(0), gameRunning(false) {}
+    : board(gridSize), view(std::move(view)), moveCount(0), gameRunning(false), stepByStepMode(false) {}
 
 std::unique_ptr<GameController> GameController::createConsoleGame(int gridSize) {
     auto consoleView = std::make_unique<ConsoleView>();
@@ -75,6 +75,23 @@ bool GameController::handleCommand(const std::string& command) {
     }
     else if (command == "g" || command == "generate") {
         generateNewPuzzle();
+        return true;
+    }
+    else if (command == "solve" || command == "s") {
+        return solvePuzzle(SolverType::NEURO_SYMBOLIC);
+    }
+    else if (command == "ai" || command == "hint") {
+        return getNextAIMove();
+    }
+    else if (command == "enable_ai" || command == "enable") {
+        return enableStepByStepSolving(SolverType::NEURO_SYMBOLIC);
+    }
+    else if (command == "disable_ai" || command == "disable") {
+        disableStepByStepSolving();
+        return true;
+    }
+    else if (command == "hints" || command == "possible") {
+        showPossibleMoves();
         return true;
     }
     else {
@@ -216,4 +233,133 @@ void GameController::initializeSamplePuzzle() {
         }
     }
     moveCount = 0;
+}
+
+// ============================================================================
+// AI Solver Integration Methods
+// ============================================================================
+
+bool GameController::solvePuzzle(SolverType solverType) {
+    view->showMessage("🤖 AI is solving the puzzle... Please wait...");
+    
+    // Create the appropriate solver
+    aiSolver = SolverFactory::createSolver(solverType);
+    if (!aiSolver) {
+        view->showError("❌ Failed to create solver!");
+        return false;
+    }
+    
+    // Check if puzzle can be solved
+    if (!aiSolver->canSolve(board)) {
+        view->showError("❌ Puzzle cannot be solved - invalid state!");
+        return false;
+    }
+    
+    // Make a copy to solve
+    Board solutionBoard = board;
+    
+    // Solve the puzzle
+    bool solved = aiSolver->solve(solutionBoard);
+    
+    if (solved) {
+        // Update the board with solution
+        board = solutionBoard;
+        moveCount += aiSolver->getMovesCount();
+        
+        view->showSuccess("✨ Puzzle solved by " + aiSolver->getSolverName() + "!");
+        view->showMessage("📊 Solver used " + std::to_string(aiSolver->getMovesCount()) + " moves");
+        view->showMessage("⏱️  Solve time: " + std::to_string(aiSolver->getSolveTimeMs()) + " ms");
+        
+        checkGameState(); // Check if game is won
+        return true;
+    } else {
+        view->showError("❌ AI couldn't solve the puzzle!");
+        return false;
+    }
+}
+
+bool GameController::getNextAIMove() {
+    if (!aiSolver) {
+        view->showError("❌ No AI solver active! Use 'enable step-by-step' first.");
+        return false;
+    }
+    
+    SolverMove move{-1, -1, -1, "", 0.0};
+    bool hasMove = aiSolver->getNextMove(board, move);
+    
+    if (hasMove) {
+        // Make the AI move
+        board.getCell(move.row, move.col).setValue(move.value);
+        moveCount++;
+        
+        view->showSuccess("🤖 AI Move: Row " + std::to_string(move.row + 1) + 
+                         ", Col " + std::to_string(move.col + 1) + 
+                         ", Value " + std::to_string(move.value));
+        view->showMessage("💡 Reasoning: " + move.reasoning);
+        view->showMessage("🎯 Confidence: " + std::to_string(move.confidence * 100) + "%");
+        
+        checkGameState();
+        return true;
+    } else {
+        view->showMessage("🏁 No more AI moves available - puzzle may be complete!");
+        return false;
+    }
+}
+
+bool GameController::enableStepByStepSolving(SolverType solverType) {
+    view->showMessage("🎯 Enabling step-by-step AI assistance...");
+    
+    aiSolver = SolverFactory::createSolver(solverType);
+    if (!aiSolver) {
+        view->showError("❌ Failed to create solver!");
+        return false;
+    }
+    
+    stepByStepMode = true;
+    view->showSuccess("✅ Step-by-step mode enabled with " + aiSolver->getSolverName());
+    view->showMessage("💡 Use 'ai' command to get next AI move, or 'hints' to see all possible moves");
+    
+    return true;
+}
+
+void GameController::disableStepByStepSolving() {
+    aiSolver.reset();
+    stepByStepMode = false;
+    view->showSuccess("🚫 Step-by-step AI mode disabled");
+}
+
+std::vector<SolverMove> GameController::getAIPossibleMoves() const {
+    if (!aiSolver) {
+        return {};
+    }
+    
+    return aiSolver->getAllPossibleMoves(board);
+}
+
+void GameController::showPossibleMoves() {
+    if (!aiSolver) {
+        view->showError("❌ No AI solver active! Use 'enable_ai' first.");
+        return;
+    }
+    
+    std::vector<SolverMove> moves = getAIPossibleMoves();
+    
+    if (moves.empty()) {
+        view->showMessage("🏁 No AI moves available - puzzle may be complete!");
+        return;
+    }
+    
+    view->showMessage("🎯 Possible AI moves (top 5):");
+    int count = 0;
+    for (const auto& move : moves) {
+        if (count >= 5) break; // Show only top 5 moves
+        
+        view->showMessage("  " + std::to_string(count + 1) + ". Row " + 
+                         std::to_string(move.row + 1) + ", Col " + 
+                         std::to_string(move.col + 1) + ", Value " + 
+                         std::to_string(move.value) + 
+                         " (Confidence: " + std::to_string(move.confidence * 100) + "%)");
+        view->showMessage("     💡 " + move.reasoning);
+        count++;
+    }
 }

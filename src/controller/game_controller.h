@@ -40,6 +40,9 @@ public:
     void disableStepByStepSolving();
     std::vector<SolverMove> getAIPossibleMoves() const;
     
+    // Helper methods for AI interaction
+    void showPossibleMoves();
+    
     // Game state
     bool isGameWon() const;
     void checkGameState();

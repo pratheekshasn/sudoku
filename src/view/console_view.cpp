@@ -33,6 +33,13 @@ void ConsoleView::showHelp() {
     std::cout << "║  l, load     - Load sample puzzle     ║\n";
     std::cout << "║  q, quit     - Exit the game          ║\n";
     std::cout << "║                                       ║\n";
+    std::cout << "║ AI Commands:                          ║\n";
+    std::cout << "║  solve, s    - Let AI solve puzzle    ║\n";
+    std::cout << "║  ai, hint    - Get next AI move       ║\n";
+    std::cout << "║  hints       - Show possible AI moves ║\n";
+    std::cout << "║  enable_ai   - Enable AI assistance   ║\n";
+    std::cout << "║  disable_ai  - Disable AI assistance  ║\n";
+    std::cout << "║                                       ║\n";
     std::cout << "║ Input format for moves:               ║\n";
     std::cout << "║  Row: 1-9, Col: 1-9, Value: 1-9      ║\n";
     std::cout << "║  (Use 0 to clear a cell)              ║\n";
