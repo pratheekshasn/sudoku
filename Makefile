@@ -20,7 +20,7 @@ BINDIR = $(BUILDDIR)/bin
 MODEL_SOURCES = $(MODELDIR)/cell.cpp $(MODELDIR)/grid.cpp $(MODELDIR)/board.cpp $(MODELDIR)/sudoku_generator.cpp
 VIEW_SOURCES = $(VIEWDIR)/console_view.cpp $(VIEWDIR)/web_view.cpp
 CONTROLLER_SOURCES = $(CONTROLLERDIR)/game_controller.cpp
-SOLVER_SOURCES = $(SOLVERDIR)/solver_interface.cpp $(SOLVERDIR)/backtrack_solver.cpp $(SOLVERDIR)/constraint_solver.cpp $(SOLVERDIR)/solver_factory.cpp
+SOLVER_SOURCES = $(SOLVERDIR)/solver_interface.cpp $(SOLVERDIR)/backtrack_solver.cpp $(SOLVERDIR)/constraint_solver.cpp $(SOLVERDIR)/neuro_symbolic_solver.cpp $(SOLVERDIR)/solver_factory.cpp
 API_SOURCES = $(APIDIR)/json_api.cpp
 SOURCES = $(MODEL_SOURCES) $(VIEW_SOURCES) $(CONTROLLER_SOURCES) $(SOLVER_SOURCES) $(API_SOURCES)
 

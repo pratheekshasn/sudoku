@@ -1,0 +1,521 @@
+/*
+Neuro-Symbolic Solver Implementation
+Demonstrates hybrid AI combining neural networks with symbolic reasoning
+*/
+
+#include "neuro_symbolic_solver.h"
+#include <algorithm>
+#include <cmath>
+#include <random>
+#include <numeric>
+
+// ============================================================================
+// SudokuNeuralNetwork Implementation
+// ============================================================================
+
+SudokuNeuralNetwork::SudokuNeuralNetwork(int boardSize) 
+    : boardSize(boardSize), rng(std::random_device{}()) {
+    calculateNetworkSize();
+    initializeNetwork();
+}
+
+void SudokuNeuralNetwork::calculateNetworkSize() {
+    // Adaptive input size calculation
+    // Board state features: boardSize * boardSize
+    // Position features: 5 (row, col, value, box_row, box_col)  
+    // Neighborhood features: 4 (density metrics)
+    inputSize = (boardSize * boardSize) + 5 + 4;
+    
+    // Hidden layer size: empirically good ratio for Sudoku
+    // For 4x4: 25 inputs -> 15 hidden
+    // For 9x9: 90 inputs -> 45 hidden  
+    // For 16x16: 261 inputs -> 130 hidden
+    hiddenSize = std::max(10, inputSize / 2);
+}
+
+void SudokuNeuralNetwork::initializeNetwork() {
+    // Initialize hidden layer
+    hiddenLayer.clear();
+    hiddenLayer.resize(hiddenSize);
+    
+    for (auto& neuron : hiddenLayer) {
+        neuron.weights.resize(inputSize);
+        // Xavier initialization
+        double range = sqrt(6.0 / (inputSize + hiddenSize));
+        std::uniform_real_distribution<double> dist(-range, range);
+        
+        for (double& weight : neuron.weights) {
+            weight = dist(rng);
+        }
+        neuron.bias = dist(rng);
+    }
+    
+    // Initialize output layer
+    outputLayer.clear();
+    outputLayer.resize(1);
+    outputLayer[0].weights.resize(hiddenSize);
+    double range = sqrt(6.0 / (hiddenSize + 1));
+    std::uniform_real_distribution<double> dist(-range, range);
+    
+    for (double& weight : outputLayer[0].weights) {
+        weight = dist(rng);
+    }
+    outputLayer[0].bias = dist(rng);
+}
+
+void SudokuNeuralNetwork::adaptToBoardSize(int newSize) {
+    if (newSize != boardSize) {
+        boardSize = newSize;
+        calculateNetworkSize();
+        initializeNetwork();
+    }
+}
+
+std::vector<double> SudokuNeuralNetwork::extractFeatures(const Board& board, int row, int col, int value) {
+    std::vector<double> features;
+    features.reserve(inputSize);
+    
+    int size = board.getBoardSize();
+    
+    // Board state features (size*size values: 0-max_value, normalized to 0-1)
+    for (int r = 0; r < size; ++r) {
+        for (int c = 0; c < size; ++c) {
+            double cellValue = board.getCell(r, c).getValue() / (double)size;
+            features.push_back(cellValue);
+        }
+    }
+    
+    // Position and value features (5 values) - normalized for any board size
+    features.push_back(row / (double)(size - 1));           // Row position (0-1)
+    features.push_back(col / (double)(size - 1));           // Column position (0-1)
+    features.push_back(value / (double)size);               // Candidate value (0-1)
+    features.push_back((row / static_cast<int>(sqrt(size))) / (sqrt(size) - 1)); // Box row (0-1)
+    features.push_back((col / static_cast<int>(sqrt(size))) / (sqrt(size) - 1)); // Box col (0-1)
+    
+    // Local neighborhood density (4 values)
+    int filledNeighbors = 0;
+    int totalNeighbors = 0;
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int dc = -1; dc <= 1; ++dc) {
+            int nr = row + dr, nc = col + dc;
+            if (nr >= 0 && nr < size && nc >= 0 && nc < size && !(dr == 0 && dc == 0)) {
+                totalNeighbors++;
+                if (board.getCell(nr, nc).getValue() != 0) {
+                    filledNeighbors++;
+                }
+            }
+        }
+    }
+    features.push_back(totalNeighbors > 0 ? filledNeighbors / (double)totalNeighbors : 0.0);
+    features.push_back(totalNeighbors / 8.0); // Max 8 neighbors
+    features.push_back(0.5); // Reserved for future features
+    features.push_back(0.5); // Reserved for future features
+    
+    return features;
+}
+
+double SudokuNeuralNetwork::forward(const std::vector<double>& features) {
+    // Forward pass through hidden layer
+    for (size_t i = 0; i < hiddenLayer.size(); ++i) {
+        double sum = hiddenLayer[i].bias;
+        for (size_t j = 0; j < features.size(); ++j) {
+            sum += features[j] * hiddenLayer[i].weights[j];
+        }
+        // ReLU activation
+        hiddenLayer[i].output = std::max(0.0, sum);
+    }
+    
+    // Forward pass through output layer
+    double sum = outputLayer[0].bias;
+    for (size_t i = 0; i < hiddenLayer.size(); ++i) {
+        sum += hiddenLayer[i].output * outputLayer[0].weights[i];
+    }
+    
+    // Sigmoid activation for confidence (0-1)
+    return 1.0 / (1.0 + exp(-sum));
+}
+
+double SudokuNeuralNetwork::predictMoveConfidence(const Board& board, int row, int col, int value) {
+    std::vector<double> features = extractFeatures(board, row, col, value);
+    return forward(features);
+}
+
+void SudokuNeuralNetwork::updateWeights(const Board& board, int row, int col, int value, bool wasCorrect) {
+    // Simplified backpropagation for demonstration
+    std::vector<double> features = extractFeatures(board, row, col, value);
+    double predicted = forward(features);
+    double target = wasCorrect ? 0.9 : 0.1;
+    double error = target - predicted;
+    
+    // Update output layer
+    for (size_t i = 0; i < hiddenLayer.size(); ++i) {
+        outputLayer[0].weights[i] += learningRate * error * hiddenLayer[i].output;
+    }
+    outputLayer[0].bias += learningRate * error;
+    
+    // Update hidden layer (simplified)
+    for (size_t i = 0; i < hiddenLayer.size(); ++i) {
+        double hiddenError = error * outputLayer[0].weights[i] * (hiddenLayer[i].output > 0 ? 1.0 : 0.0);
+        for (size_t j = 0; j < features.size(); ++j) {
+            hiddenLayer[i].weights[j] += learningRate * hiddenError * features[j];
+        }
+        hiddenLayer[i].bias += learningRate * hiddenError;
+    }
+}
+
+double SudokuNeuralNetwork::assessDifficulty(const Board& board) {
+    int filledCells = 0;
+    int size = board.getBoardSize();
+    
+    for (int r = 0; r < size; ++r) {
+        for (int c = 0; c < size; ++c) {
+            if (board.getCell(r, c).getValue() != 0) {
+                filledCells++;
+            }
+        }
+    }
+    
+    double fillRatio = filledCells / (double)(size * size);
+    return 1.0 - fillRatio; // Higher difficulty = fewer filled cells
+}
+
+// ============================================================================
+// SymbolicReasoner Implementation  
+// ============================================================================
+
+SymbolicReasoner::SymbolicReasoner() {}
+
+std::vector<SolverMove> SymbolicReasoner::applyLogicalRules(const Board& board) {
+    std::vector<SolverMove> moves;
+    
+    // Apply forced moves first (highest confidence)
+    std::vector<SolverMove> forced = findForcedMoves(board);
+    moves.insert(moves.end(), forced.begin(), forced.end());
+    
+    // Apply pattern detection
+    std::vector<SolverMove> patterns = detectPatterns(board);
+    moves.insert(moves.end(), patterns.begin(), patterns.end());
+    
+    return moves;
+}
+
+std::vector<SolverMove> SymbolicReasoner::findForcedMoves(const Board& board) {
+    std::vector<SolverMove> moves;
+    int size = board.getBoardSize();
+    
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            if (board.getCell(row, col).getValue() == 0) {
+                std::vector<int> candidates = getCandidates(board, row, col);
+                
+                if (candidates.size() == 1) {
+                    std::string reasoning = "Symbolic: Forced move (only one possibility)";
+                    moves.emplace_back(row, col, candidates[0], reasoning, 1.0);
+                }
+            }
+        }
+    }
+    
+    return moves;
+}
+
+std::vector<SolverMove> SymbolicReasoner::detectPatterns(const Board& board) {
+    std::vector<SolverMove> moves;
+    int size = board.getBoardSize();
+    
+    // Detect naked and hidden singles
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            if (board.getCell(row, col).getValue() == 0) {
+                int value;
+                if (isNakedSingle(board, row, col, value)) {
+                    std::string reasoning = "Symbolic: Naked single detected";
+                    moves.emplace_back(row, col, value, reasoning, 0.95);
+                }
+                
+                // Check for hidden singles
+                for (int v = 1; v <= size; ++v) {
+                    if (isHiddenSingle(board, row, col, v)) {
+                        std::string reasoning = "Symbolic: Hidden single for value " + std::to_string(v);
+                        moves.emplace_back(row, col, v, reasoning, 0.9);
+                    }
+                }
+            }
+        }
+    }
+    
+    return moves;
+}
+
+bool SymbolicReasoner::isNakedSingle(const Board& board, int row, int col, int& value) {
+    std::vector<int> candidates = getCandidates(board, row, col);
+    if (candidates.size() == 1) {
+        value = candidates[0];
+        return true;
+    }
+    return false;
+}
+
+bool SymbolicReasoner::isHiddenSingle(const Board& board, int row, int col, int value) {
+    if (!validateMove(board, row, col, value)) {
+        return false;
+    }
+    
+    int size = board.getBoardSize();
+    
+    // Check if this value can appear elsewhere in the row
+    for (int c = 0; c < size; ++c) {
+        if (c != col && board.getCell(row, c).getValue() == 0) {
+            if (validateMove(board, row, c, value)) {
+                return false; // Value can appear elsewhere
+            }
+        }
+    }
+    
+    return true; // Hidden single found
+}
+
+std::vector<int> SymbolicReasoner::getCandidates(const Board& board, int row, int col) {
+    std::vector<int> candidates;
+    int size = board.getBoardSize();
+    
+    for (int value = 1; value <= size; ++value) {
+        if (validateMove(board, row, col, value)) {
+            candidates.push_back(value);
+        }
+    }
+    
+    return candidates;
+}
+
+bool SymbolicReasoner::validateMove(const Board& board, int row, int col, int value) {
+    return !violatesConstraints(board, row, col, value);
+}
+
+bool SymbolicReasoner::violatesConstraints(const Board& board, int row, int col, int value) {
+    int size = board.getBoardSize();
+    int gridSize = static_cast<int>(sqrt(size));
+    
+    // Check row constraint
+    for (int c = 0; c < size; ++c) {
+        if (c != col && board.getCell(row, c).getValue() == value) {
+            return true;
+        }
+    }
+    
+    // Check column constraint
+    for (int r = 0; r < size; ++r) {
+        if (r != row && board.getCell(r, col).getValue() == value) {
+            return true;
+        }
+    }
+    
+    // Check 3x3 box constraint
+    int boxStartRow = (row / gridSize) * gridSize;
+    int boxStartCol = (col / gridSize) * gridSize;
+    
+    for (int r = boxStartRow; r < boxStartRow + gridSize; ++r) {
+        for (int c = boxStartCol; c < boxStartCol + gridSize; ++c) {
+            if ((r != row || c != col) && board.getCell(r, c).getValue() == value) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+// ============================================================================
+// NeuroSymbolicSolver Implementation
+// ============================================================================
+
+NeuroSymbolicSolver::NeuroSymbolicSolver(int boardSize) 
+    : neuralNet(std::make_unique<SudokuNeuralNetwork>(boardSize))
+    , symbolicReasoner(std::make_unique<SymbolicReasoner>()) {
+}
+
+bool NeuroSymbolicSolver::solve(Board& board) {
+    bool progress = true;
+    int iterations = 0;
+    const int maxIterations = 1000;
+    
+    while (progress && !isBoardComplete(board) && iterations < maxIterations) {
+        progress = false;
+        SolverMove move{-1, -1, -1, "", 0.0}; // Initialize with default values
+        
+        if (getNextMove(board, move)) {
+            board.getCell(move.row, move.col).setValue(move.value);
+            progress = true;
+            movesCount++;
+        }
+        
+        iterations++;
+    }
+    
+    return isBoardComplete(board);
+}
+
+bool NeuroSymbolicSolver::canSolve(const Board& board) const {
+    return board.isValid();
+}
+
+bool NeuroSymbolicSolver::getNextMove(const Board& board, SolverMove& move) {
+    std::vector<SolverMove> moves = getAllPossibleMoves(board);
+    if (!moves.empty()) {
+        move = moves[0]; // Return highest confidence move
+        return true;
+    }
+    return false;
+}
+
+std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& board) {
+    // Auto-adapt to board size if needed
+    int currentBoardSize = board.getBoardSize();
+    neuralNet->adaptToBoardSize(currentBoardSize);
+    
+    // Get symbolic reasoning moves
+    std::vector<SolverMove> symbolicMoves = symbolicReasoner->applyLogicalRules(board);
+    
+    // Get neural network predictions for all possible moves
+    std::vector<SolverMove> neuralMoves;
+    int size = board.getBoardSize();
+    
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            if (board.getCell(row, col).getValue() == 0) {
+                for (int value = 1; value <= size; ++value) {
+                    if (symbolicReasoner->validateMove(board, row, col, value)) {
+                        double neuralConf = neuralNet->predictMoveConfidence(board, row, col, value);
+                        std::string reasoning = "Neural: Pattern-based prediction";
+                        neuralMoves.emplace_back(row, col, value, reasoning, neuralConf);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Combine and rank moves using hybrid approach
+    std::vector<SolverMove> combinedMoves;
+    
+    // Add symbolic moves with boosted confidence
+    for (auto& move : symbolicMoves) {
+        move.confidence = fuseConfidences(0.5, move.confidence, move.reasoning);
+        move.reasoning = "Hybrid: " + move.reasoning;
+        combinedMoves.push_back(move);
+    }
+    
+    // Add neural moves that aren't already covered by symbolic reasoning
+    for (const auto& neuralMove : neuralMoves) {
+        bool alreadyExists = false;
+        for (const auto& symbolicMove : symbolicMoves) {
+            if (symbolicMove.row == neuralMove.row && 
+                symbolicMove.col == neuralMove.col && 
+                symbolicMove.value == neuralMove.value) {
+                alreadyExists = true;
+                break;
+            }
+        }
+        
+        if (!alreadyExists && neuralMove.confidence > 0.6) { // Neural threshold
+            SolverMove hybrid = neuralMove;
+            hybrid.confidence = fuseConfidences(neuralMove.confidence, 0.3, neuralMove.reasoning);
+            hybrid.reasoning = "Hybrid: " + neuralMove.reasoning;
+            combinedMoves.push_back(hybrid);
+        }
+    }
+    
+    // Sort by fused confidence
+    std::sort(combinedMoves.begin(), combinedMoves.end(),
+              [](const SolverMove& a, const SolverMove& b) {
+                  return a.confidence > b.confidence;
+              });
+    
+    return combinedMoves;
+}
+
+double NeuroSymbolicSolver::fuseConfidences(double neuralConf, double symbolicConf, 
+                                           const std::string& reasoning) {
+    lastNeuralConfidence = neuralConf;
+    lastSymbolicConfidence = symbolicConf;
+    
+    // Weighted fusion based on strategy
+    switch (currentStrategy) {
+        case Strategy::SYMBOLIC_FIRST:
+            return 0.8 * symbolicConf + 0.2 * neuralConf;
+        
+        case Strategy::NEURAL_GUIDED:
+            return 0.7 * neuralConf + 0.3 * symbolicConf;
+        
+        case Strategy::BALANCED_FUSION:
+        default:
+            // Harmonic mean for balanced fusion
+            if (neuralConf > 0 && symbolicConf > 0) {
+                return 2.0 * neuralConf * symbolicConf / (neuralConf + symbolicConf);
+            }
+            return std::max(neuralConf, symbolicConf);
+    }
+}
+
+void NeuroSymbolicSolver::trainOnSolution(const Board& originalBoard, const Board& solvedBoard) {
+    // Extract training data from the solution path
+    // This is a simplified training approach
+    int size = originalBoard.getBoardSize();
+    
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            if (originalBoard.getCell(row, col).getValue() == 0) {
+                int correctValue = solvedBoard.getCell(row, col).getValue();
+                
+                // Train neural network: correct value should have high confidence
+                neuralNet->updateWeights(originalBoard, row, col, correctValue, true);
+                
+                // Train on wrong values (they should have low confidence)
+                for (int wrongValue = 1; wrongValue <= size; ++wrongValue) {
+                    if (wrongValue != correctValue && 
+                        symbolicReasoner->validateMove(originalBoard, row, col, wrongValue)) {
+                        neuralNet->updateWeights(originalBoard, row, col, wrongValue, false);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void NeuroSymbolicSolver::adaptToBoardSize(int newSize) {
+    neuralNet->adaptToBoardSize(newSize);
+}
+
+SolverMove NeuroSymbolicSolver::combineNeuralAndSymbolic(const Board& board,
+                                                        const std::vector<SolverMove>& symbolicMoves,
+                                                        const std::vector<SolverMove>& neuralMoves) {
+    // Prioritize symbolic moves for high-confidence logical deductions
+    for (const auto& move : symbolicMoves) {
+        if (move.confidence > 0.9) {
+            return move;
+        }
+    }
+    
+    // For ambiguous cases, use neural guidance
+    if (!neuralMoves.empty()) {
+        SolverMove bestMove = neuralMoves[0];
+        bestMove.reasoning = "Neuro-Symbolic: Neural guidance for ambiguous case";
+        return bestMove;
+    }
+    
+    // Fallback to best symbolic move
+    if (!symbolicMoves.empty()) {
+        return symbolicMoves[0];
+    }
+    
+    // No valid moves found
+    return SolverMove{-1, -1, -1, "No valid moves found", 0.0};
+}
+
+void NeuroSymbolicSolver::learnFromError(const Board& board, const SolverMove& move, bool wasCorrect) {
+    neuralNet->updateWeights(board, move.row, move.col, move.value, wasCorrect);
+    
+    if (wasCorrect) {
+        correctPredictions++;
+    }
+    totalPredictions++;
+}

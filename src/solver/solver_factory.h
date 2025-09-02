@@ -14,9 +14,10 @@ Implements Factory Pattern for solver instantiation
 
 enum class SolverType {
     BACKTRACK,
-    CONSTRAINT,  // Future: constraint propagation
-    HEURISTIC,   // Future: advanced heuristics
-    AI_NEURAL    // Future: machine learning
+    CONSTRAINT,
+    HEURISTIC,
+    AI_NEURAL,
+    NEURO_SYMBOLIC
 };
 
 class SolverFactory {

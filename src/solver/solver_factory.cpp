@@ -5,6 +5,7 @@ Solver Factory Implementation
 #include "solver_factory.h"
 #include "backtrack_solver.h"
 #include "constraint_solver.h"
+#include "neuro_symbolic_solver.h"
 
 // Static member initialization
 std::map<std::string, SolverType> SolverFactory::nameToTypeMap;
@@ -26,6 +27,9 @@ std::unique_ptr<SudokuSolver> SolverFactory::createSolver(SolverType type) {
             // TODO: Implement AISolver
             return nullptr;
         
+        case SolverType::NEURO_SYMBOLIC:
+            return std::make_unique<NeuroSymbolicSolver>();
+        
         default:
             return nullptr;
     }
@@ -45,7 +49,8 @@ std::unique_ptr<SudokuSolver> SolverFactory::createSolver(const std::string& nam
 std::vector<SolverType> SolverFactory::getAvailableSolvers() {
     return {
         SolverType::BACKTRACK,
-        SolverType::CONSTRAINT
+        SolverType::CONSTRAINT,
+        SolverType::NEURO_SYMBOLIC
         // Add more as they're implemented
     };
 }
@@ -74,6 +79,8 @@ std::string SolverFactory::getSolverDescription(SolverType type) {
             return "Advanced heuristics and strategies";
         case SolverType::AI_NEURAL:
             return "Machine learning neural network solver";
+        case SolverType::NEURO_SYMBOLIC:
+            return "Hybrid neural-symbolic reasoning solver";
         default:
             return "Unknown solver type";
     }
@@ -89,6 +96,8 @@ SolverDifficulty SolverFactory::getSolverDifficulty(SolverType type) {
             return SolverDifficulty::EXPERT;
         case SolverType::AI_NEURAL:
             return SolverDifficulty::AI_NEURAL;
+        case SolverType::NEURO_SYMBOLIC:
+            return SolverDifficulty::AI_NEURAL;
         default:
             return SolverDifficulty::BASIC;
     }
@@ -100,10 +109,12 @@ void SolverFactory::initializeMaps() {
         nameToTypeMap["constraint"] = SolverType::CONSTRAINT;
         nameToTypeMap["heuristic"] = SolverType::HEURISTIC;
         nameToTypeMap["ai_neural"] = SolverType::AI_NEURAL;
+        nameToTypeMap["neuro_symbolic"] = SolverType::NEURO_SYMBOLIC;
         
         typeToNameMap[SolverType::BACKTRACK] = "backtrack";
         typeToNameMap[SolverType::CONSTRAINT] = "constraint";
         typeToNameMap[SolverType::HEURISTIC] = "heuristic";
         typeToNameMap[SolverType::AI_NEURAL] = "ai_neural";
+        typeToNameMap[SolverType::NEURO_SYMBOLIC] = "neuro_symbolic";
     }
 }
