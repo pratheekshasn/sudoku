@@ -35,7 +35,7 @@
         
         .sudoku-board {
             display: grid;
-            grid-template-columns: repeat(9, 1fr);
+            grid-template-columns: repeat(var(--grid-size, 9), 1fr);
             gap: 2px;
             background: #333;
             border: 3px solid #333;
@@ -351,25 +351,38 @@
     </div>
 
     <script>
+        // Grid configuration
+        const GRID_SIZE = 9;
+        const BOX_SIZE = 3; // For 3x3 subgrids in standard Sudoku
+        
         let selectedCell = null;
         let selectedNumber = null;
-        let gameBoard = Array(9).fill().map(() => Array(9).fill(0));
-        let lockedCells = Array(9).fill().map(() => Array(9).fill(false));
+        let gameBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+        let lockedCells = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(false));
+        
+        // Set CSS custom property for grid size
+        function setGridSize(size) {
+            document.documentElement.style.setProperty('--grid-size', size);
+        }
         
         // Initialize the game board
         function initializeBoard() {
+            // Set the CSS grid size
+            setGridSize(GRID_SIZE);
+            
             const board = document.getElementById('sudokuBoard');
             board.innerHTML = '';
             
-            for (let i = 0; i < 81; i++) {
+            const totalCells = GRID_SIZE * GRID_SIZE;
+            for (let i = 0; i < totalCells; i++) {
                 const cell = document.createElement('input');
                 cell.type = 'text';
                 cell.maxLength = 1;
                 cell.className = 'cell';
                 cell.id = `cell-${i}`;
                 
-                const row = Math.floor(i / 9);
-                const col = i % 9;
+                const row = Math.floor(i / GRID_SIZE);
+                const col = i % GRID_SIZE;
                 
                 cell.addEventListener('click', () => selectCell(row, col));
                 cell.addEventListener('input', (e) => handleInput(row, col, e.target.value));
@@ -390,7 +403,7 @@
                 selectedCell.classList.remove('selected');
             }
             
-            selectedCell = document.getElementById(`cell-${row * 9 + col}`);
+            selectedCell = document.getElementById(`cell-${row * GRID_SIZE + col}`);
             selectedCell.classList.add('selected');
             selectedCell.focus();
         }
@@ -399,8 +412,8 @@
             selectedNumber = num;
             if (selectedCell) {
                 handleInput(
-                    Math.floor(selectedCell.id.split('-')[1] / 9),
-                    selectedCell.id.split('-')[1] % 9,
+                    Math.floor(selectedCell.id.split('-')[1] / GRID_SIZE),
+                    selectedCell.id.split('-')[1] % GRID_SIZE,
                     num === 0 ? '' : num.toString()
                 );
             }
@@ -465,7 +478,7 @@
                     e.preventDefault();
                     break;
                 case 'ArrowDown':
-                    if (row < 8) selectCell(row + 1, col);
+                    if (row < GRID_SIZE - 1) selectCell(row + 1, col);
                     e.preventDefault();
                     break;
                 case 'ArrowLeft':
@@ -473,7 +486,7 @@
                     e.preventDefault();
                     break;
                 case 'ArrowRight':
-                    if (col < 8) selectCell(row, col + 1);
+                    if (col < GRID_SIZE - 1) selectCell(row, col + 1);
                     e.preventDefault();
                     break;
                 case 'Delete':
@@ -485,10 +498,11 @@
         }
         
         function moveToNextCell(row, col) {
-            let nextIndex = row * 9 + col + 1;
-            if (nextIndex < 81) {
-                const nextRow = Math.floor(nextIndex / 9);
-                const nextCol = nextIndex % 9;
+            let nextIndex = row * GRID_SIZE + col + 1;
+            const totalCells = GRID_SIZE * GRID_SIZE;
+            if (nextIndex < totalCells) {
+                const nextRow = Math.floor(nextIndex / GRID_SIZE);
+                const nextCol = nextIndex % GRID_SIZE;
                 selectCell(nextRow, nextCol);
             }
         }
@@ -566,22 +580,23 @@
         
         function validateSudoku() {
             // Check rows
-            for (let row = 0; row < 9; row++) {
+            for (let row = 0; row < GRID_SIZE; row++) {
                 if (!isValidSet(gameBoard[row])) return false;
             }
             
             // Check columns
-            for (let col = 0; col < 9; col++) {
+            for (let col = 0; col < GRID_SIZE; col++) {
                 const column = gameBoard.map(row => row[col]);
                 if (!isValidSet(column)) return false;
             }
             
-            // Check 3x3 subgrids
-            for (let boxRow = 0; boxRow < 3; boxRow++) {
-                for (let boxCol = 0; boxCol < 3; boxCol++) {
+            // Check subgrids (BOX_SIZE x BOX_SIZE)
+            const boxesPerSide = GRID_SIZE / BOX_SIZE;
+            for (let boxRow = 0; boxRow < boxesPerSide; boxRow++) {
+                for (let boxCol = 0; boxCol < boxesPerSide; boxCol++) {
                     const box = [];
-                    for (let row = boxRow * 3; row < boxRow * 3 + 3; row++) {
-                        for (let col = boxCol * 3; col < boxCol * 3 + 3; col++) {
+                    for (let row = boxRow * BOX_SIZE; row < boxRow * BOX_SIZE + BOX_SIZE; row++) {
+                        for (let col = boxCol * BOX_SIZE; col < boxCol * BOX_SIZE + BOX_SIZE; col++) {
                             box.push(gameBoard[row][col]);
                         }
                     }
@@ -666,20 +681,25 @@
         }
         
         async function loadFallbackPuzzle() {
-            // Fallback puzzle if API is unavailable
-            const puzzle = [
-                [5, 3, 0, 0, 7, 0, 0, 0, 0],
-                [6, 0, 0, 1, 9, 5, 0, 0, 0],
-                [0, 9, 8, 0, 0, 0, 0, 6, 0],
-                [8, 0, 0, 0, 6, 0, 0, 0, 3],
-                [4, 0, 0, 8, 0, 3, 0, 0, 1],
-                [7, 0, 0, 0, 2, 0, 0, 0, 6],
-                [0, 6, 0, 0, 0, 0, 2, 8, 0],
-                [0, 0, 0, 4, 1, 9, 0, 0, 5],
-                [0, 0, 0, 0, 8, 0, 0, 7, 9]
-            ];
+            // Fallback puzzle if API is unavailable (9x9 Sudoku)
+            if (GRID_SIZE === 9) {
+                const puzzle = [
+                    [5, 3, 0, 0, 7, 0, 0, 0, 0],
+                    [6, 0, 0, 1, 9, 5, 0, 0, 0],
+                    [0, 9, 8, 0, 0, 0, 0, 6, 0],
+                    [8, 0, 0, 0, 6, 0, 0, 0, 3],
+                    [4, 0, 0, 8, 0, 3, 0, 0, 1],
+                    [7, 0, 0, 0, 2, 0, 0, 0, 6],
+                    [0, 6, 0, 0, 0, 0, 2, 8, 0],
+                    [0, 0, 0, 4, 1, 9, 0, 0, 5],
+                    [0, 0, 0, 0, 8, 0, 0, 7, 9]
+                ];
+                gameBoard = puzzle.map(row => [...row]);
+            } else {
+                // For other grid sizes, create empty board
+                gameBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            }
             
-            gameBoard = puzzle.map(row => [...row]);
             updateDisplay();
             await updateGameStatus(); // Now async
         }
@@ -710,8 +730,8 @@
         function updateFromBackendData(data) {
             if (data.cells) {
                 // New format with locked cell information
-                for (let row = 0; row < 9; row++) {
-                    for (let col = 0; col < 9; col++) {
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
                         if (data.cells[row] && data.cells[row][col]) {
                             gameBoard[row][col] = data.cells[row][col].value;
                             lockedCells[row][col] = data.cells[row][col].locked;
@@ -722,15 +742,15 @@
                 // Old format - just numbers
                 gameBoard = data;
                 // Reset all locks for old format
-                lockedCells = Array(9).fill().map(() => Array(9).fill(false));
+                lockedCells = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(false));
             }
             updateDisplay();
         }
         
         function updateDisplay() {
-            for (let row = 0; row < 9; row++) {
-                for (let col = 0; col < 9; col++) {
-                    const cell = document.getElementById(`cell-${row * 9 + col}`);
+            for (let row = 0; row < GRID_SIZE; row++) {
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    const cell = document.getElementById(`cell-${row * GRID_SIZE + col}`);
                     const value = gameBoard[row][col];
                     const isLocked = lockedCells[row][col];
                     cell.value = value === 0 ? '' : value.toString();
@@ -936,7 +956,7 @@
             });
             
             // Add highlight to suggested cell
-            const cell = document.getElementById(`cell-${row * 9 + col}`);
+            const cell = document.getElementById(`cell-${row * GRID_SIZE + col}`);
             if (cell) {
                 cell.classList.add('ai-suggested');
                 cell.style.border = '3px solid #4caf50';
