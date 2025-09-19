@@ -587,9 +587,8 @@ std::string SudokuJsonApi::getTrainingStats() {
            << "\"solver_name\":\"" << neuroSolver->getSolverName() << "\","
            << "\"total_moves\":" << neuroSolver->getMovesCount() << ","
            << "\"solve_time_ms\":" << neuroSolver->getSolveTimeMs() << ","
-           << "\"neural_confidence\":" << neuroSolver->getNeuralConfidence() << ","
-           << "\"symbolic_confidence\":" << neuroSolver->getSymbolicConfidence() << ","
-           << "\"current_strategy\":" << (int)neuroSolver->getCurrentStrategy()
+           << "\"architecture\":\"Symbolic-Informed Neural Network\","
+           << "\"description\":\"Neural network enhanced with symbolic reasoning hints\""
            << "}";
     
     return createResponse(true, "Training statistics retrieved", result.str());

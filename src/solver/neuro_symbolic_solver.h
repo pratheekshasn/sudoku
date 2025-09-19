@@ -72,37 +72,21 @@ private:
     std::mt19937 rng;
 };
 
-// Symbolic reasoning engine
+// Symbolic reasoning engine - generates hints for neural network
 class SymbolicReasoner {
 public:
     SymbolicReasoner();
     
-    // Apply logical rules and constraints
-    std::vector<SolverMove> applyLogicalRules(const Board& board);
-    
     // Validate moves using constraint satisfaction
     bool validateMove(const Board& board, int row, int col, int value);
     
-    // Find forced moves using constraint propagation
-    std::vector<SolverMove> findForcedMoves(const Board& board);
-    
-    // Detect logical patterns (naked singles, hidden singles, etc.)
-    std::vector<SolverMove> detectPatterns(const Board& board);
-    
-    // Generate symbolic hints for neural network
+    // Generate symbolic hints for neural network (main purpose)
     std::vector<double> generateSymbolicHints(const Board& board, int row, int col, int value);
 
 private:
-    // Rule-based pattern detection
+    // Rule-based pattern detection for hints
     bool isNakedSingle(const Board& board, int row, int col, int& value);
     bool isHiddenSingle(const Board& board, int row, int col, int value);
-    
-    // Advanced symbolic reasoning patterns
-    std::vector<SolverMove> detectAdvancedPatterns(const Board& board);
-    std::vector<SolverMove> findNakedPairs(const Board& board);
-    std::vector<SolverMove> findPointingPairs(const Board& board);
-    std::vector<SolverMove> findBoxLineReductions(const Board& board);
-    std::vector<SolverMove> findXWingPatterns(const Board& board);
     
     // Constraint satisfaction helpers
     std::vector<int> getCandidates(const Board& board, int row, int col);
@@ -111,20 +95,13 @@ private:
 
 class NeuroSymbolicSolver : public SudokuSolver {
 public:
-    // Hybrid strategy selection
-    enum class Strategy {
-        SYMBOLIC_FIRST,    // Use logic first, neural for ambiguous cases
-        NEURAL_GUIDED,     // Neural guides symbolic search
-        BALANCED_FUSION    // Equal weight to both approaches
-    };
-    
     explicit NeuroSymbolicSolver(int boardSize = 9);
     
     // Core solving methods
     bool solve(Board& board) override;
     bool canSolve(const Board& board) const override;
     
-    // Step-by-step solving with hybrid reasoning
+    // Step-by-step solving with symbolic-informed neural network
     bool getNextMove(const Board& board, SolverMove& move) override;
     std::vector<SolverMove> getAllPossibleMoves(const Board& board) override;
     
@@ -132,7 +109,7 @@ public:
     std::string getSolverName() const override { return "Symbolic-Informed Neural Solver"; }
     SolverDifficulty getDifficulty() const override { return SolverDifficulty::AI_NEURAL; }
     std::string getDescription() const override { 
-        return "Advanced AI solver where symbolic reasoning directly influences neural network decisions"; 
+        return "Neural network enhanced with symbolic reasoning hints as input features"; 
     }
     
     // Training interface
@@ -140,35 +117,17 @@ public:
     
     // Adapt neural network to different board size
     void adaptToBoardSize(int newSize);
-    
-    // Getters for inspection
-    double getNeuralConfidence() const { return lastNeuralConfidence; }
-    double getSymbolicConfidence() const { return lastSymbolicConfidence; }
-    Strategy getCurrentStrategy() const { return currentStrategy; }
 
 private:
     std::unique_ptr<SudokuNeuralNetwork> neuralNet;
     std::unique_ptr<SymbolicReasoner> symbolicReasoner;
     
-    // Hybrid decision making
-    SolverMove combineNeuralAndSymbolic(const Board& board, 
-                                       const std::vector<SolverMove>& symbolicMoves,
-                                       const std::vector<SolverMove>& neuralMoves);
-    
-    // Confidence fusion
-    double fuseConfidences(double neuralConf, double symbolicConf, 
-                          const std::string& reasoning);
-    
     // Learning from mistakes
     void learnFromError(const Board& board, const SolverMove& move, bool wasCorrect);
     
     // Performance tracking
-    double lastNeuralConfidence = 0.0;
-    double lastSymbolicConfidence = 0.0;
     int correctPredictions = 0;
     int totalPredictions = 0;
-    
-    Strategy currentStrategy = Strategy::BALANCED_FUSION;
 };
 
 #endif // SUDOKU_NEURO_SYMBOLIC_SOLVER_H

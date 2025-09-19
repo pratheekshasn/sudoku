@@ -212,71 +212,7 @@ double SudokuNeuralNetwork::assessDifficulty(const Board& board) {
 
 SymbolicReasoner::SymbolicReasoner() {}
 
-std::vector<SolverMove> SymbolicReasoner::applyLogicalRules(const Board& board) {
-    std::vector<SolverMove> moves;
-    
-    // Apply forced moves first (highest confidence)
-    std::vector<SolverMove> forced = findForcedMoves(board);
-    moves.insert(moves.end(), forced.begin(), forced.end());
-    
-    // Apply pattern detection
-    std::vector<SolverMove> patterns = detectPatterns(board);
-    moves.insert(moves.end(), patterns.begin(), patterns.end());
-    
-    return moves;
-}
 
-std::vector<SolverMove> SymbolicReasoner::findForcedMoves(const Board& board) {
-    std::vector<SolverMove> moves;
-    int size = board.getBoardSize();
-    
-    for (int row = 0; row < size; ++row) {
-        for (int col = 0; col < size; ++col) {
-            if (board.getCell(row, col).getValue() == 0) {
-                std::vector<int> candidates = getCandidates(board, row, col);
-                
-                if (candidates.size() == 1) {
-                    std::string reasoning = "Symbolic: Forced move (only one possibility)";
-                    moves.emplace_back(row, col, candidates[0], reasoning, 1.0);
-                }
-            }
-        }
-    }
-    
-    return moves;
-}
-
-std::vector<SolverMove> SymbolicReasoner::detectPatterns(const Board& board) {
-    std::vector<SolverMove> moves;
-    int size = board.getBoardSize();
-    
-    // Detect naked and hidden singles (basic patterns)
-    for (int row = 0; row < size; ++row) {
-        for (int col = 0; col < size; ++col) {
-            if (board.getCell(row, col).getValue() == 0) {
-                int value;
-                if (isNakedSingle(board, row, col, value)) {
-                    std::string reasoning = "Symbolic: Naked single detected";
-                    moves.emplace_back(row, col, value, reasoning, 0.95);
-                }
-                
-                // Check for hidden singles
-                for (int v = 1; v <= size; ++v) {
-                    if (isHiddenSingle(board, row, col, v)) {
-                        std::string reasoning = "Symbolic: Hidden single for value " + std::to_string(v);
-                        moves.emplace_back(row, col, v, reasoning, 0.9);
-                    }
-                }
-            }
-        }
-    }
-    
-    // Advanced symbolic reasoning patterns
-    std::vector<SolverMove> advanced = detectAdvancedPatterns(board);
-    moves.insert(moves.end(), advanced.begin(), advanced.end());
-    
-    return moves;
-}
 
 bool SymbolicReasoner::isNakedSingle(const Board& board, int row, int col, int& value) {
     std::vector<int> candidates = getCandidates(board, row, col);
@@ -356,126 +292,7 @@ bool SymbolicReasoner::violatesConstraints(const Board& board, int row, int col,
     return false;
 }
 
-// Advanced symbolic reasoning patterns - this is what makes it truly "symbolic"
-std::vector<SolverMove> SymbolicReasoner::detectAdvancedPatterns(const Board& board) {
-    std::vector<SolverMove> moves;
-    
-    // 1. NAKED PAIRS/TRIPLES - If two cells in a unit can only contain the same two values,
-    //    those values can be eliminated from other cells in that unit
-    std::vector<SolverMove> nakedPairs = findNakedPairs(board);
-    moves.insert(moves.end(), nakedPairs.begin(), nakedPairs.end());
-    
-    // 2. POINTING PAIRS - If a candidate appears in only one row/col within a box,
-    //    it can be eliminated from that row/col outside the box
-    std::vector<SolverMove> pointing = findPointingPairs(board);
-    moves.insert(moves.end(), pointing.begin(), pointing.end());
-    
-    // 3. BOX/LINE REDUCTION - If all candidates for a value in a box are in one line,
-    //    eliminate that value from the rest of the line
-    std::vector<SolverMove> boxLine = findBoxLineReductions(board);
-    moves.insert(moves.end(), boxLine.begin(), boxLine.end());
-    
-    // 4. X-WING PATTERN - Advanced elimination technique
-    std::vector<SolverMove> xwing = findXWingPatterns(board);
-    moves.insert(moves.end(), xwing.begin(), xwing.end());
-    
-    return moves;
-}
 
-std::vector<SolverMove> SymbolicReasoner::findNakedPairs(const Board& board) {
-    std::vector<SolverMove> moves;
-    int size = board.getBoardSize();
-    
-    // Check rows for naked pairs
-    for (int row = 0; row < size; ++row) {
-        std::vector<std::vector<int>> candidates(size);
-        for (int col = 0; col < size; ++col) {
-            if (board.getCell(row, col).getValue() == 0) {
-                candidates[col] = getCandidates(board, row, col);
-            }
-        }
-        
-        // Find pairs
-        for (int c1 = 0; c1 < size - 1; ++c1) {
-            for (int c2 = c1 + 1; c2 < size; ++c2) {
-                if (candidates[c1].size() == 2 && candidates[c2].size() == 2 &&
-                    candidates[c1] == candidates[c2]) {
-                    // Found naked pair! This is logical deduction, not brute force
-                    std::string reasoning = "Symbolic: Naked pair elimination in row " + std::to_string(row + 1);
-                    // In a real implementation, we'd eliminate these values from other cells
-                    // For now, we'll mark this as a high-confidence logical pattern
-                    if (!candidates[c1].empty()) {
-                        moves.emplace_back(row, c1, candidates[c1][0], reasoning, 0.85);
-                    }
-                }
-            }
-        }
-    }
-    
-    return moves;
-}
-
-std::vector<SolverMove> SymbolicReasoner::findPointingPairs(const Board& board) {
-    std::vector<SolverMove> moves;
-    int size = board.getBoardSize();
-    int gridSize = static_cast<int>(sqrt(size));
-    
-    // For each 3x3 box
-    for (int boxRow = 0; boxRow < gridSize; ++boxRow) {
-        for (int boxCol = 0; boxCol < gridSize; ++boxCol) {
-            int startRow = boxRow * gridSize;
-            int startCol = boxCol * gridSize;
-            
-            // For each possible value
-            for (int value = 1; value <= size; ++value) {
-                std::vector<std::pair<int, int>> positions;
-                
-                // Find where this value can go in this box
-                for (int r = startRow; r < startRow + gridSize; ++r) {
-                    for (int c = startCol; c < startCol + gridSize; ++c) {
-                        if (board.getCell(r, c).getValue() == 0 &&
-                            validateMove(board, r, c, value)) {
-                            positions.push_back({r, c});
-                        }
-                    }
-                }
-                
-                // If all positions are in the same row (pointing pair)
-                if (positions.size() >= 2) {
-                    bool sameRow = true;
-                    int firstRow = positions[0].first;
-                    for (const auto& pos : positions) {
-                        if (pos.first != firstRow) {
-                            sameRow = false;
-                            break;
-                        }
-                    }
-                    
-                    if (sameRow && positions.size() == 2) {
-                        std::string reasoning = "Symbolic: Pointing pair for value " + std::to_string(value);
-                        moves.emplace_back(positions[0].first, positions[0].second, value, reasoning, 0.8);
-                    }
-                }
-            }
-        }
-    }
-    
-    return moves;
-}
-
-std::vector<SolverMove> SymbolicReasoner::findBoxLineReductions(const Board& board) {
-    std::vector<SolverMove> moves;
-    // This would implement box/line reduction logic
-    // For now, return empty to keep the example concise
-    return moves;
-}
-
-std::vector<SolverMove> SymbolicReasoner::findXWingPatterns(const Board& board) {
-    std::vector<SolverMove> moves;
-    // This would implement X-Wing pattern detection
-    // For now, return empty to keep the example concise
-    return moves;
-}
 
 std::vector<double> SymbolicReasoner::generateSymbolicHints(const Board& board, int row, int col, int value) {
     std::vector<double> hints(8, 0.0);
@@ -620,12 +437,8 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
     int currentBoardSize = board.getBoardSize();
     neuralNet->adaptToBoardSize(currentBoardSize);
     
-    // Get symbolic reasoning moves
-    std::vector<SolverMove> symbolicMoves = symbolicReasoner->applyLogicalRules(board);
-    
-    // Get neural network predictions for all possible moves
-    // Now the neural network receives symbolic hints as input!
-    std::vector<SolverMove> neuralMoves;
+    // Generate all possible moves using symbolic-informed neural network
+    std::vector<SolverMove> moves;
     int size = board.getBoardSize();
     
     for (int row = 0; row < size; ++row) {
@@ -636,101 +449,34 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
                         // Generate symbolic hints for this specific move
                         std::vector<double> symbolicHints = symbolicReasoner->generateSymbolicHints(board, row, col, value);
                         
-                        // Neural network now receives and processes symbolic hints!
-                        double neuralConf = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
+                        // Neural network receives both patterns AND symbolic reasoning
+                        double confidence = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
                         
-                        std::string reasoning = "Symbolic-Informed Neural: Pattern + Logic fusion";
-                        neuralMoves.emplace_back(row, col, value, reasoning, neuralConf);
+                        // Generate reasoning based on symbolic hints
+                        std::string reasoning = "Symbolic-Informed Neural: ";
+                        if (symbolicHints[0] > 0.5) reasoning += "Forced move (only one possibility)";
+                        else if (symbolicHints[1] > 0.5) reasoning += "Naked single detected";
+                        else if (symbolicHints[2] > 0.5) reasoning += "Hidden single detected";
+                        else if (symbolicHints[3] > 0.5) reasoning += "Invalid move";
+                        else reasoning += "Pattern + Logic fusion";
+                        
+                        moves.emplace_back(row, col, value, reasoning, confidence);
                     }
                 }
             }
         }
     }
     
-    // Combine and rank moves using hybrid approach
-    std::vector<SolverMove> combinedMoves;
-    
-    // Add symbolic moves with boosted confidence
-    for (auto& move : symbolicMoves) {
-        move.confidence = fuseConfidences(0.5, move.confidence, move.reasoning);
-        move.reasoning = "Hybrid: " + move.reasoning;
-        combinedMoves.push_back(move);
-    }
-    
-    // Add neural moves that aren't already covered by symbolic reasoning
-    for (const auto& neuralMove : neuralMoves) {
-        bool alreadyExists = false;
-        for (const auto& symbolicMove : symbolicMoves) {
-            if (symbolicMove.row == neuralMove.row && 
-                symbolicMove.col == neuralMove.col && 
-                symbolicMove.value == neuralMove.value) {
-                alreadyExists = true;
-                break;
-            }
-        }
-        
-        if (!alreadyExists && neuralMove.confidence > 0.6) { // Neural threshold
-            SolverMove hybrid = neuralMove;
-            hybrid.confidence = fuseConfidences(neuralMove.confidence, 0.3, neuralMove.reasoning);
-            hybrid.reasoning = "Hybrid: " + neuralMove.reasoning;
-            combinedMoves.push_back(hybrid);
-        }
-    }
-    
-    // Sort by fused confidence
-    std::sort(combinedMoves.begin(), combinedMoves.end(),
+    // Sort by confidence (highest first)
+    std::sort(moves.begin(), moves.end(),
               [](const SolverMove& a, const SolverMove& b) {
                   return a.confidence > b.confidence;
               });
     
-    return combinedMoves;
+    return moves;
 }
 
-double NeuroSymbolicSolver::fuseConfidences(double neuralConf, double symbolicConf, 
-                                           const std::string& reasoning) {
-    lastNeuralConfidence = neuralConf;
-    lastSymbolicConfidence = symbolicConf;
-    
-    // Weighted fusion based on strategy
-    switch (currentStrategy) {
-        case Strategy::SYMBOLIC_FIRST:
-            return 0.8 * symbolicConf + 0.2 * neuralConf;
-        
-        case Strategy::NEURAL_GUIDED:
-            return 0.7 * neuralConf + 0.3 * symbolicConf;
-        
-        case Strategy::BALANCED_FUSION:
-        default: {
-            // Enhanced balanced fusion with multiple techniques
-            
-            // 1. Harmonic mean: Conservative, penalizes disagreement
-            double harmonic = (neuralConf > 0 && symbolicConf > 0) ? 
-                2.0 * neuralConf * symbolicConf / (neuralConf + symbolicConf) : 
-                std::max(neuralConf, symbolicConf);
-            
-            // 2. Geometric mean: Balanced, but less conservative
-            double geometric = (neuralConf > 0 && symbolicConf > 0) ? 
-                sqrt(neuralConf * symbolicConf) : 
-                std::max(neuralConf, symbolicConf);
-            
-            // 3. Agreement-weighted fusion: Higher weight when systems agree
-            double agreement = 1.0 - abs(neuralConf - symbolicConf);
-            double arithmetic = (neuralConf + symbolicConf) / 2.0;
-            
-            // Choose fusion method based on agreement level
-            if (agreement > 0.8) {
-                // High agreement: use geometric mean (maintains confidence)
-                return geometric;
-            } else if (agreement > 0.5) {
-                // Medium agreement: blend harmonic and geometric
-                return 0.6 * harmonic + 0.4 * geometric;
-            } else {
-                // Low agreement: use conservative harmonic mean
-                return harmonic;
-            }
-        }
-    }
-}
+
 
 void NeuroSymbolicSolver::trainOnSolution(const Board& originalBoard, const Board& solvedBoard) {
     // Extract training data from the solution path
@@ -768,31 +514,7 @@ void NeuroSymbolicSolver::adaptToBoardSize(int newSize) {
     neuralNet->adaptToBoardSize(newSize);
 }
 
-SolverMove NeuroSymbolicSolver::combineNeuralAndSymbolic(const Board& board,
-                                                        const std::vector<SolverMove>& symbolicMoves,
-                                                        const std::vector<SolverMove>& neuralMoves) {
-    // Prioritize symbolic moves for high-confidence logical deductions
-    for (const auto& move : symbolicMoves) {
-        if (move.confidence > 0.9) {
-            return move;
-        }
-    }
-    
-    // For ambiguous cases, use neural guidance
-    if (!neuralMoves.empty()) {
-        SolverMove bestMove = neuralMoves[0];
-        bestMove.reasoning = "Neuro-Symbolic: Neural guidance for ambiguous case";
-        return bestMove;
-    }
-    
-    // Fallback to best symbolic move
-    if (!symbolicMoves.empty()) {
-        return symbolicMoves[0];
-    }
-    
-    // No valid moves found
-    return SolverMove{-1, -1, -1, "No valid moves found", 0.0};
-}
+
 
 void NeuroSymbolicSolver::learnFromError(const Board& board, const SolverMove& move, bool wasCorrect) {
     // Generate symbolic hints for learning from errors
