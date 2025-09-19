@@ -1,6 +1,14 @@
 /*
-Neuro-Symbolic Solver - Hybrid AI approach
-Combines neural networks for pattern recognition with symbolic reasoning for logical deduction
+Symbolic-Informed Neural Solver - Advanced Hybrid AI approach
+The neural network receives direct input from symbolic reasoning, creating a tightly
+integrated system where logical deduction influences pattern recognition at the neural level.
+
+Architecture Change:
+- OLD: Neural Net + Symbolic Reasoner → Confidence Fusion  
+- NEW: Symbolic Reasoner → Neural Net (with symbolic hints as input features)
+
+This allows the neural network to learn not just from patterns, but from logical
+reasoning principles, creating a more interpretable and effective AI system.
 */
 
 #ifndef SUDOKU_NEURO_SYMBOLIC_SOLVER_H
@@ -17,11 +25,13 @@ class SudokuNeuralNetwork {
 public:
     SudokuNeuralNetwork(int boardSize = 9);
     
-    // Predict confidence for a move based on board patterns
-    double predictMoveConfidence(const Board& board, int row, int col, int value);
+    // Predict confidence for a move based on board patterns and symbolic hints
+    double predictMoveConfidence(const Board& board, int row, int col, int value, 
+                                const std::vector<double>& symbolicHints = {});
     
     // Learn from successful moves (simplified training)
-    void updateWeights(const Board& board, int row, int col, int value, bool wasCorrect);
+    void updateWeights(const Board& board, int row, int col, int value, bool wasCorrect,
+                      const std::vector<double>& symbolicHints = {});
     
     // Get pattern-based difficulty assessment
     double assessDifficulty(const Board& board);
@@ -45,7 +55,8 @@ private:
     std::vector<Neuron> outputLayer;
     
     // Extract features from board state around a cell (size-adaptive)
-    std::vector<double> extractFeatures(const Board& board, int row, int col, int value);
+    std::vector<double> extractFeatures(const Board& board, int row, int col, int value,
+                                       const std::vector<double>& symbolicHints = {});
     
     // Forward propagation
     double forward(const std::vector<double>& features);
@@ -77,6 +88,9 @@ public:
     
     // Detect logical patterns (naked singles, hidden singles, etc.)
     std::vector<SolverMove> detectPatterns(const Board& board);
+    
+    // Generate symbolic hints for neural network
+    std::vector<double> generateSymbolicHints(const Board& board, int row, int col, int value);
 
 private:
     // Rule-based pattern detection
@@ -115,10 +129,10 @@ public:
     std::vector<SolverMove> getAllPossibleMoves(const Board& board) override;
     
     // Solver information
-    std::string getSolverName() const override { return "Neuro-Symbolic Solver"; }
+    std::string getSolverName() const override { return "Symbolic-Informed Neural Solver"; }
     SolverDifficulty getDifficulty() const override { return SolverDifficulty::AI_NEURAL; }
     std::string getDescription() const override { 
-        return "Hybrid AI solver combining neural pattern recognition with symbolic reasoning"; 
+        return "Advanced AI solver where symbolic reasoning directly influences neural network decisions"; 
     }
     
     // Training interface

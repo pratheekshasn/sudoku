@@ -24,12 +24,13 @@ void SudokuNeuralNetwork::calculateNetworkSize() {
     // Board state features: boardSize * boardSize
     // Position features: 5 (row, col, value, box_row, box_col)  
     // Neighborhood features: 4 (density metrics)
-    inputSize = (boardSize * boardSize) + 5 + 4;
+    // Symbolic hints: 8 (logical reasoning features)
+    inputSize = (boardSize * boardSize) + 5 + 4 + 8;
     
     // Hidden layer size: empirically good ratio for Sudoku
-    // For 4x4: 25 inputs -> 15 hidden
-    // For 9x9: 90 inputs -> 45 hidden  
-    // For 16x16: 261 inputs -> 130 hidden
+    // For 4x4: 33 inputs -> 20 hidden
+    // For 9x9: 98 inputs -> 50 hidden  
+    // For 16x16: 269 inputs -> 135 hidden
     hiddenSize = std::max(10, inputSize / 2);
 }
 
@@ -71,7 +72,8 @@ void SudokuNeuralNetwork::adaptToBoardSize(int newSize) {
     }
 }
 
-std::vector<double> SudokuNeuralNetwork::extractFeatures(const Board& board, int row, int col, int value) {
+std::vector<double> SudokuNeuralNetwork::extractFeatures(const Board& board, int row, int col, int value, 
+                                                      const std::vector<double>& symbolicHints) {
     std::vector<double> features;
     features.reserve(inputSize);
     
@@ -117,6 +119,23 @@ std::vector<double> SudokuNeuralNetwork::extractFeatures(const Board& board, int
     features.push_back(0.5); // Reserved for future features
     features.push_back(0.5); // Reserved for future features
     
+    // Symbolic hints (8 values) - these are the key new features!
+    if (symbolicHints.size() >= 8) {
+        for (int i = 0; i < 8; ++i) {
+            features.push_back(symbolicHints[i]);
+        }
+    } else {
+        // Default symbolic hints if not provided
+        features.push_back(0.0); // isForced: 1.0 if this is a forced move
+        features.push_back(0.0); // isNakedSingle: 1.0 if naked single detected
+        features.push_back(0.0); // isHiddenSingle: 1.0 if hidden single detected
+        features.push_back(0.0); // constraintViolations: number of violations (0-1)
+        features.push_back(0.0); // candidateCount: normalized number of candidates
+        features.push_back(0.0); // logicalConfidence: confidence from symbolic reasoning
+        features.push_back(0.0); // patternStrength: strength of detected patterns
+        features.push_back(0.0); // eliminationPower: how many eliminations this move enables
+    }
+    
     return features;
 }
 
@@ -141,14 +160,16 @@ double SudokuNeuralNetwork::forward(const std::vector<double>& features) {
     return 1.0 / (1.0 + exp(-sum));
 }
 
-double SudokuNeuralNetwork::predictMoveConfidence(const Board& board, int row, int col, int value) {
-    std::vector<double> features = extractFeatures(board, row, col, value);
+double SudokuNeuralNetwork::predictMoveConfidence(const Board& board, int row, int col, int value,
+                                                 const std::vector<double>& symbolicHints) {
+    std::vector<double> features = extractFeatures(board, row, col, value, symbolicHints);
     return forward(features);
 }
 
-void SudokuNeuralNetwork::updateWeights(const Board& board, int row, int col, int value, bool wasCorrect) {
+void SudokuNeuralNetwork::updateWeights(const Board& board, int row, int col, int value, bool wasCorrect,
+                                        const std::vector<double>& symbolicHints) {
     // Simplified backpropagation for demonstration
-    std::vector<double> features = extractFeatures(board, row, col, value);
+    std::vector<double> features = extractFeatures(board, row, col, value, symbolicHints);
     double predicted = forward(features);
     double target = wasCorrect ? 0.9 : 0.1;
     double error = target - predicted;
@@ -456,6 +477,101 @@ std::vector<SolverMove> SymbolicReasoner::findXWingPatterns(const Board& board) 
     return moves;
 }
 
+std::vector<double> SymbolicReasoner::generateSymbolicHints(const Board& board, int row, int col, int value) {
+    std::vector<double> hints(8, 0.0);
+    
+    // Hint 0: isForced - Is this a forced move (only candidate)?
+    std::vector<int> candidates = getCandidates(board, row, col);
+    hints[0] = (candidates.size() == 1 && candidates[0] == value) ? 1.0 : 0.0;
+    
+    // Hint 1: isNakedSingle - Is this a naked single?
+    int nakedValue;
+    hints[1] = isNakedSingle(board, row, col, nakedValue) && nakedValue == value ? 1.0 : 0.0;
+    
+    // Hint 2: isHiddenSingle - Is this a hidden single?
+    hints[2] = isHiddenSingle(board, row, col, value) ? 1.0 : 0.0;
+    
+    // Hint 3: constraintViolations - How many constraints would this violate? (normalized)
+    double violations = violatesConstraints(board, row, col, value) ? 1.0 : 0.0;
+    hints[3] = violations;
+    
+    // Hint 4: candidateCount - Number of possible candidates for this cell (normalized)
+    int size = board.getBoardSize();
+    hints[4] = candidates.size() / (double)size;
+    
+    // Hint 5: logicalConfidence - Overall confidence from logical rules
+    double logicalConf = 0.0;
+    if (hints[0] > 0.5) logicalConf = 1.0;      // Forced move
+    else if (hints[1] > 0.5) logicalConf = 0.95; // Naked single  
+    else if (hints[2] > 0.5) logicalConf = 0.9;  // Hidden single
+    else if (hints[3] == 0.0) logicalConf = 0.7; // Valid move
+    else logicalConf = 0.1; // Invalid move
+    hints[5] = logicalConf;
+    
+    // Hint 6: patternStrength - Strength of detected patterns
+    double patternStrength = 0.0;
+    // Check for advanced patterns at this position
+    if (hints[1] > 0.5 || hints[2] > 0.5) {
+        patternStrength = 0.9; // Strong single patterns
+    } else {
+        // Check for weaker patterns like pairs, etc.
+        // For now, base on candidate count - fewer candidates = stronger pattern
+        patternStrength = std::max(0.0, 1.0 - (candidates.size() / (double)size));
+    }
+    hints[6] = patternStrength;
+    
+    // Hint 7: eliminationPower - How many eliminations would this move enable?
+    double eliminationPower = 0.0;
+    if (hints[3] == 0.0) { // Only if move is valid
+        // Count empty cells in same row, column, and box that would be affected
+        int affectedCells = 0;
+        int totalEmpty = 0;
+        
+        // Check row
+        for (int c = 0; c < size; ++c) {
+            if (board.getCell(row, c).getValue() == 0) {
+                totalEmpty++;
+                std::vector<int> cellCandidates = getCandidates(board, row, c);
+                if (std::find(cellCandidates.begin(), cellCandidates.end(), value) != cellCandidates.end()) {
+                    affectedCells++;
+                }
+            }
+        }
+        
+        // Check column  
+        for (int r = 0; r < size; ++r) {
+            if (board.getCell(r, col).getValue() == 0) {
+                if (r != row) totalEmpty++; // Don't double count current cell
+                std::vector<int> cellCandidates = getCandidates(board, r, col);
+                if (std::find(cellCandidates.begin(), cellCandidates.end(), value) != cellCandidates.end()) {
+                    affectedCells++;
+                }
+            }
+        }
+        
+        // Check box
+        int gridSize = static_cast<int>(sqrt(size));
+        int boxStartRow = (row / gridSize) * gridSize;
+        int boxStartCol = (col / gridSize) * gridSize;
+        
+        for (int r = boxStartRow; r < boxStartRow + gridSize; ++r) {
+            for (int c = boxStartCol; c < boxStartCol + gridSize; ++c) {
+                if (board.getCell(r, c).getValue() == 0 && !(r == row && c == col)) {
+                    std::vector<int> cellCandidates = getCandidates(board, r, c);
+                    if (std::find(cellCandidates.begin(), cellCandidates.end(), value) != cellCandidates.end()) {
+                        affectedCells++;
+                    }
+                }
+            }
+        }
+        
+        eliminationPower = totalEmpty > 0 ? affectedCells / (double)totalEmpty : 0.0;
+    }
+    hints[7] = eliminationPower;
+    
+    return hints;
+}
+
 // ============================================================================
 // NeuroSymbolicSolver Implementation
 // ============================================================================
@@ -508,6 +624,7 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
     std::vector<SolverMove> symbolicMoves = symbolicReasoner->applyLogicalRules(board);
     
     // Get neural network predictions for all possible moves
+    // Now the neural network receives symbolic hints as input!
     std::vector<SolverMove> neuralMoves;
     int size = board.getBoardSize();
     
@@ -516,8 +633,13 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
             if (board.getCell(row, col).getValue() == 0) {
                 for (int value = 1; value <= size; ++value) {
                     if (symbolicReasoner->validateMove(board, row, col, value)) {
-                        double neuralConf = neuralNet->predictMoveConfidence(board, row, col, value);
-                        std::string reasoning = "Neural: Pattern-based prediction";
+                        // Generate symbolic hints for this specific move
+                        std::vector<double> symbolicHints = symbolicReasoner->generateSymbolicHints(board, row, col, value);
+                        
+                        // Neural network now receives and processes symbolic hints!
+                        double neuralConf = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
+                        
+                        std::string reasoning = "Symbolic-Informed Neural: Pattern + Logic fusion";
                         neuralMoves.emplace_back(row, col, value, reasoning, neuralConf);
                     }
                 }
@@ -612,7 +734,7 @@ double NeuroSymbolicSolver::fuseConfidences(double neuralConf, double symbolicCo
 
 void NeuroSymbolicSolver::trainOnSolution(const Board& originalBoard, const Board& solvedBoard) {
     // Extract training data from the solution path
-    // This is a simplified training approach
+    // Now training includes symbolic hints for better learning
     int size = originalBoard.getBoardSize();
     
     for (int row = 0; row < size; ++row) {
@@ -620,14 +742,21 @@ void NeuroSymbolicSolver::trainOnSolution(const Board& originalBoard, const Boar
             if (originalBoard.getCell(row, col).getValue() == 0) {
                 int correctValue = solvedBoard.getCell(row, col).getValue();
                 
+                // Generate symbolic hints for the correct move
+                std::vector<double> correctHints = symbolicReasoner->generateSymbolicHints(originalBoard, row, col, correctValue);
+                
                 // Train neural network: correct value should have high confidence
-                neuralNet->updateWeights(originalBoard, row, col, correctValue, true);
+                // The neural network now learns from both patterns AND logical reasoning!
+                neuralNet->updateWeights(originalBoard, row, col, correctValue, true, correctHints);
                 
                 // Train on wrong values (they should have low confidence)
                 for (int wrongValue = 1; wrongValue <= size; ++wrongValue) {
                     if (wrongValue != correctValue && 
                         symbolicReasoner->validateMove(originalBoard, row, col, wrongValue)) {
-                        neuralNet->updateWeights(originalBoard, row, col, wrongValue, false);
+                        
+                        // Generate symbolic hints for wrong moves too
+                        std::vector<double> wrongHints = symbolicReasoner->generateSymbolicHints(originalBoard, row, col, wrongValue);
+                        neuralNet->updateWeights(originalBoard, row, col, wrongValue, false, wrongHints);
                     }
                 }
             }
@@ -666,7 +795,9 @@ SolverMove NeuroSymbolicSolver::combineNeuralAndSymbolic(const Board& board,
 }
 
 void NeuroSymbolicSolver::learnFromError(const Board& board, const SolverMove& move, bool wasCorrect) {
-    neuralNet->updateWeights(board, move.row, move.col, move.value, wasCorrect);
+    // Generate symbolic hints for learning from errors
+    std::vector<double> hints = symbolicReasoner->generateSymbolicHints(board, move.row, move.col, move.value);
+    neuralNet->updateWeights(board, move.row, move.col, move.value, wasCorrect, hints);
     
     if (wasCorrect) {
         correctPredictions++;
