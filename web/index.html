@@ -192,6 +192,81 @@
             border: 1px solid #2196f3;
         }
         
+        .ai-panel {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .ai-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .ai-reasoning {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .ai-reasoning h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        
+        .ai-move {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .ai-move.high-confidence {
+            border-left-color: #4caf50;
+            background: #e8f5e8;
+        }
+        
+        .ai-move.medium-confidence {
+            border-left-color: #ff9800;
+            background: #fff3e0;
+        }
+        
+        .ai-move.low-confidence {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+        
+        .move-info {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .move-reasoning {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .confidence-badge {
+            display: inline-block;
+            background: #2196F3;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin-left: 8px;
+        }
+        
         @media (max-width: 600px) {
             .cell {
                 width: 35px;
@@ -206,6 +281,16 @@
             
             .title {
                 font-size: 2em;
+            }
+            
+            .ai-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .ai-controls .btn {
+                margin: 5px 0;
+                width: 200px;
             }
         }
     </style>
@@ -247,6 +332,21 @@
             <button class="btn btn-secondary" onclick="clearBoard()">Clear Board</button>
             <button class="btn btn-primary" onclick="validateBoard()">Validate</button>
             <button class="btn btn-danger" onclick="resetGame()">Reset</button>
+        </div>
+        
+        <!-- AI Assistant Panel -->
+        <div class="ai-panel">
+            <h3 style="text-align: center; color: #333; margin-bottom: 15px;">🧠 AI Assistant</h3>
+            <div class="ai-controls">
+                <button class="btn btn-primary" onclick="getAIHint()">💡 Get Hint</button>
+                <button class="btn btn-primary" onclick="showAllAIMoves()">🔍 Show All Moves</button>
+                <button class="btn btn-secondary" onclick="solveWithAI()">🤖 Solve Puzzle</button>
+                <button class="btn btn-secondary" onclick="trainAI()">🎓 Train AI</button>
+            </div>
+            <div class="ai-reasoning" id="aiReasoning">
+                <h4>AI Reasoning:</h4>
+                <div id="reasoningContent">Click "Get Hint" to see AI reasoning...</div>
+            </div>
         </div>
     </div>
 
@@ -650,6 +750,207 @@
             }
         }
         
+        // AI Assistant Functions
+        async function getAIHint() {
+            try {
+                const response = await fetch('http://localhost:5000/api/ai/hint', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        solver: 'neuro_symbolic'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const move = result.data;
+                    displayAIReasoning([move], 'Single AI Hint');
+                    
+                    // Highlight the suggested cell
+                    highlightCell(move.row - 1, move.col - 1); // Convert from 1-based to 0-based
+                } else {
+                    alert('❌ Failed to get AI hint: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error getting AI hint:', error);
+                alert('🔌 Connection error! Make sure the server is running.');
+            }
+        }
+        
+        async function showAllAIMoves() {
+            try {
+                const response = await fetch('http://localhost:5000/api/ai/moves', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        solver: 'neuro_symbolic'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayAIReasoning(result.data.moves, 'All Possible AI Moves');
+                } else {
+                    alert('❌ Failed to get AI moves: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error getting AI moves:', error);
+                alert('🔌 Connection error! Make sure the server is running.');
+            }
+        }
+        
+        async function solveWithAI() {
+            if (confirm('Let AI solve the entire puzzle?')) {
+                try {
+                    const response = await fetch('http://localhost:5000/api/ai/solve', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            solver: 'neuro_symbolic'
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        updateFromBackendData(result.data.board);
+                        await updateGameStatus();
+                        
+                        const reasoningContent = document.getElementById('reasoningContent');
+                        reasoningContent.innerHTML = `
+                            <div class="ai-move high-confidence">
+                                <div class="move-info">🎉 Puzzle Solved!</div>
+                                <div class="move-reasoning">
+                                    Solver: ${result.data.solver}<br>
+                                    Moves: ${result.data.moves}<br>
+                                    Time: ${result.data.time_ms}ms
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        alert('❌ Failed to solve: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error solving puzzle:', error);
+                    alert('🔌 Connection error! Make sure the server is running.');
+                }
+            }
+        }
+        
+        async function trainAI() {
+            const puzzles = prompt('How many puzzles to train on?', '10');
+            if (puzzles && !isNaN(puzzles)) {
+                try {
+                    const response = await fetch('http://localhost:5000/api/ai/train', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            puzzles: parseInt(puzzles)
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const reasoningContent = document.getElementById('reasoningContent');
+                        reasoningContent.innerHTML = `
+                            <div class="ai-move high-confidence">
+                                <div class="move-info">🎓 Training Complete!</div>
+                                <div class="move-reasoning">
+                                    Puzzles trained: ${result.data.puzzles_trained}/${result.data.total_requested}<br>
+                                    Success rate: ${result.data.success_rate.toFixed(1)}%<br>
+                                    Training time: ${result.data.training_time_ms}ms
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        alert('❌ Training failed: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error training AI:', error);
+                    alert('🔌 Connection error! Make sure the server is running.');
+                }
+            }
+        }
+        
+        function displayAIReasoning(moves, title) {
+            const reasoningContent = document.getElementById('reasoningContent');
+            
+            if (!moves || moves.length === 0) {
+                reasoningContent.innerHTML = '<div>No AI moves available.</div>';
+                return;
+            }
+            
+            let html = `<h5>${title} (${moves.length} moves)</h5>`;
+            
+            // Show top 5 moves to avoid overwhelming the user
+            const topMoves = moves.slice(0, 5);
+            
+            topMoves.forEach((move, index) => {
+                const confidence = move.confidence;
+                let confidenceClass = 'medium-confidence';
+                let confidenceColor = '#ff9800';
+                
+                if (confidence >= 0.8) {
+                    confidenceClass = 'high-confidence';
+                    confidenceColor = '#4caf50';
+                } else if (confidence < 0.5) {
+                    confidenceClass = 'low-confidence';
+                    confidenceColor = '#f44336';
+                }
+                
+                html += `
+                    <div class="ai-move ${confidenceClass}">
+                        <div class="move-info">
+                            ${index + 1}. Place ${move.value} at Row ${move.row}, Col ${move.col}
+                            <span class="confidence-badge" style="background: ${confidenceColor}">
+                                ${(confidence * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div class="move-reasoning">${move.reasoning}</div>
+                    </div>
+                `;
+            });
+            
+            if (moves.length > 5) {
+                html += `<div style="text-align: center; color: #666; margin-top: 10px;">... and ${moves.length - 5} more moves</div>`;
+            }
+            
+            reasoningContent.innerHTML = html;
+        }
+        
+        function highlightCell(row, col) {
+            // Remove previous highlights
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.classList.remove('ai-suggested');
+            });
+            
+            // Add highlight to suggested cell
+            const cell = document.getElementById(`cell-${row * 9 + col}`);
+            if (cell) {
+                cell.classList.add('ai-suggested');
+                cell.style.border = '3px solid #4caf50';
+                cell.style.boxShadow = '0 0 10px rgba(76, 175, 80, 0.5)';
+                
+                // Remove highlight after 3 seconds
+                setTimeout(() => {
+                    cell.classList.remove('ai-suggested');
+                    cell.style.border = '';
+                    cell.style.boxShadow = '';
+                }, 3000);
+            }
+        }
+        
         // Initialize the game when page loads
         window.addEventListener('load', async () => {
             initializeBoard();
@@ -671,7 +972,7 @@
                     
                     // Show connection success
                     const status = document.getElementById('gameStatus');
-                    status.textContent = '🔗 Connected to C++ backend!';
+                    status.textContent = '🔗 Connected to C++ backend with AI!';
                     status.className = 'status valid';
                 } else {
                     throw new Error(result.message);

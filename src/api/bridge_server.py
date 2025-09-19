@@ -96,6 +96,48 @@ def validate_board():
     response = call_cpp_api("validate")
     return jsonify(response)
 
+@app.route('/api/ai/hint', methods=['POST'])
+def get_ai_hint():
+    """Get AI hint using the symbolic-informed neural solver"""
+    data = request.json
+    solver_type = data.get('solver', 'neuro_symbolic')  # Default to our new solver
+    
+    response = call_cpp_api("get_ai_move", solver_type)
+    return jsonify(response)
+
+@app.route('/api/ai/moves', methods=['POST'])
+def get_ai_moves():
+    """Get all possible AI moves with reasoning"""
+    data = request.json
+    solver_type = data.get('solver', 'neuro_symbolic')
+    
+    response = call_cpp_api("get_ai_moves", solver_type)
+    return jsonify(response)
+
+@app.route('/api/ai/solve', methods=['POST'])
+def solve_puzzle():
+    """Solve the puzzle using AI"""
+    data = request.json
+    solver_type = data.get('solver', 'neuro_symbolic')
+    
+    response = call_cpp_api("solve_puzzle", solver_type)
+    return jsonify(response)
+
+@app.route('/api/ai/stats', methods=['GET'])
+def get_ai_stats():
+    """Get AI training statistics"""
+    response = call_cpp_api("training_stats")
+    return jsonify(response)
+
+@app.route('/api/ai/train', methods=['POST'])
+def train_ai():
+    """Train the AI on puzzle batch"""
+    data = request.json
+    num_puzzles = data.get('puzzles', 10)
+    
+    response = call_cpp_api("train_batch", str(num_puzzles))
+    return jsonify(response)
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
