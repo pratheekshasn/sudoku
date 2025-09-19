@@ -88,6 +88,11 @@ std::string SudokuJsonApi::makeMove(int row, int col, int value) {
         return createResponse(false, "Invalid move parameters");
     }
     
+    // Check if the cell is locked (part of the original puzzle)
+    if (board.getCell(row, col).isLocked()) {
+        return createResponse(false, "Cannot modify puzzle clue! This cell is part of the original puzzle.");
+    }
+    
     // Store old value for potential rollback
     int oldValue = board.getCell(row, col).getValue();
     
@@ -135,6 +140,15 @@ std::string SudokuJsonApi::generatePuzzle(const std::string& difficulty) {
         return createResponse(false, "Failed to generate puzzle");
     }
     
+    // Lock all cells that have values (are part of the puzzle clues)
+    int size = board.getBoardSize();
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            int value = board.getCell(row, col).getValue();
+            board.getCell(row, col).setLocked(value != 0);
+        }
+    }
+    
     moveCount = 0;
     saveState(); // Persist the generated puzzle
     std::string boardJson = boardToJson();
@@ -145,6 +159,7 @@ std::string SudokuJsonApi::clearBoard() {
     for (int row = 0; row < board.getBoardSize(); ++row) {
         for (int col = 0; col < board.getBoardSize(); ++col) {
             board.getCell(row, col).setValue(0);
+            board.getCell(row, col).setLocked(false);
         }
     }
     moveCount = 0;
@@ -282,20 +297,21 @@ std::string SudokuJsonApi::getAIPossibleMoves(const std::string& solverType) {
 std::string SudokuJsonApi::boardToJson() {
     int size = board.getBoardSize();
     std::ostringstream oss;
-    oss << "[";
+    oss << "{\"cells\":[";
     
     for (int row = 0; row < size; row++) {
         oss << "[";
         for (int col = 0; col < size; col++) {
             int value = board.getCell(row, col).getValue();
-            oss << value;
+            bool locked = board.getCell(row, col).isLocked();
+            oss << "{\"value\":" << value << ",\"locked\":" << (locked ? "true" : "false") << "}";
             if (col < size - 1) oss << ",";
         }
         oss << "]";
         if (row < size - 1) oss << ",";
     }
     
-    oss << "]";
+    oss << "]}";
     return oss.str();
 }
 
@@ -346,9 +362,13 @@ void SudokuJsonApi::initializeSamplePuzzle() {
     for (int row = 0; row < size; ++row) {
         for (int col = 0; col < size; ++col) {
             if (size == 9 && row < 9 && col < 9) {
-                board.getCell(row, col).setValue(puzzle[row][col]);
+                int value = puzzle[row][col];
+                board.getCell(row, col).setValue(value);
+                // Lock cells that are part of the original puzzle (non-zero values)
+                board.getCell(row, col).setLocked(value != 0);
             } else {
-                board.getCell(row, col).setValue(0); // Clear for non-9x9 boards
+                board.getCell(row, col).setValue(0);
+                board.getCell(row, col).setLocked(false);
             }
         }
     }
@@ -412,31 +432,80 @@ void SudokuJsonApi::loadState() {
 }
 
 void SudokuJsonApi::parseBoardFromJson(const std::string& jsonData) {
-    // Simple parser for our specific board format: [[1,2,3...],[4,5,6...]...]
-    int size = board.getBoardSize();
-    int row = 0, col = 0;
-    bool inNumber = false;
-    std::string currentNumber;
-    
-    for (char c : jsonData) {
-        if (c >= '0' && c <= '9') {
-            if (!inNumber) {
-                inNumber = true;
+    // Enhanced parser for the new format with locked cells
+    // First try the new format, fall back to old format if needed
+    if (jsonData.find("\"locked\"") != std::string::npos) {
+        // New format with locked cells - for now, use simple parsing
+        // In production, you'd want a proper JSON parser
+        int size = board.getBoardSize();
+        int row = 0, col = 0;
+        bool inValue = false, inLocked = false;
+        std::string currentNumber;
+        std::string currentLocked;
+        
+        for (size_t i = 0; i < jsonData.length(); ++i) {
+            char c = jsonData[i];
+            
+            if (jsonData.substr(i, 8) == "\"value\":") {
+                inValue = true;
+                i += 7; // Skip to the number
                 currentNumber = "";
-            }
-            currentNumber += c;
-        } else if (inNumber && (c == ',' || c == ']')) {
-            // End of a number
-            if (row < size && col < size) {
-                board.getCell(row, col).setValue(std::stoi(currentNumber));
-                col++;
-                if (col >= size) {
-                    col = 0;
-                    row++;
-                    if (row >= size) break; // Prevent overflow
+            } else if (jsonData.substr(i, 9) == "\"locked\":") {
+                inLocked = true;
+                i += 8; // Skip to the boolean
+                currentLocked = "";
+            } else if (inValue && (c >= '0' && c <= '9')) {
+                currentNumber += c;
+            } else if (inValue && (c == ',' || c == '}')) {
+                inValue = false;
+                if (row < size && col < size) {
+                    board.getCell(row, col).setValue(std::stoi(currentNumber));
+                }
+            } else if (inLocked && (c == 't' || c == 'f')) {
+                // Read "true" or "false"
+                if (c == 't') currentLocked = "true";
+                else currentLocked = "false";
+                inLocked = false;
+                
+                if (row < size && col < size) {
+                    board.getCell(row, col).setLocked(currentLocked == "true");
+                    col++;
+                    if (col >= size) {
+                        col = 0;
+                        row++;
+                        if (row >= size) break;
+                    }
                 }
             }
-            inNumber = false;
+        }
+    } else {
+        // Old format - simple number arrays
+        int size = board.getBoardSize();
+        int row = 0, col = 0;
+        bool inNumber = false;
+        std::string currentNumber;
+        
+        for (char c : jsonData) {
+            if (c >= '0' && c <= '9') {
+                if (!inNumber) {
+                    inNumber = true;
+                    currentNumber = "";
+                }
+                currentNumber += c;
+            } else if (inNumber && (c == ',' || c == ']')) {
+                if (row < size && col < size) {
+                    int value = std::stoi(currentNumber);
+                    board.getCell(row, col).setValue(value);
+                    board.getCell(row, col).setLocked(false); // Default to unlocked
+                    col++;
+                    if (col >= size) {
+                        col = 0;
+                        row++;
+                        if (row >= size) break;
+                    }
+                }
+                inNumber = false;
+            }
         }
     }
 }
@@ -466,16 +535,18 @@ std::string SudokuJsonApi::trainOnPuzzleBatch(int numPuzzles) {
             // Store the VERIFIED correct solution
             Board groundTruthSolution = completeBoard;
             
-            // Now create a puzzle by removing cells
+            // Now create a puzzle by removing cells FROM THE SAME BOARD
+            // We need to create the puzzle WITHOUT regenerating the grid
+            Board puzzleToSolve = completeBoard; // Copy the same complete solution
+            
+            // Remove cells to create puzzle (without regenerating grid)
             SudokuGenerator::Difficulty difficulty = 
                 static_cast<SudokuGenerator::Difficulty>(i % 4);
             
-            if (generator.generatePuzzle(completeBoard, difficulty)) {
-                Board puzzleToSolve = completeBoard; // This is the puzzle with holes
-                
+            if (generator.createPuzzleFromCompleteGrid(puzzleToSolve, difficulty)) {
                 // NOW we have proper supervised learning:
-                // - puzzleToSolve: Input puzzle with empty cells
-                // - groundTruthSolution: VERIFIED correct complete solution
+                // - puzzleToSolve: Puzzle with holes from groundTruthSolution
+                // - groundTruthSolution: SAME complete solution (correct pairing!)
                 
                 // Train neural network on KNOWN correct solution
                 neuroSolver->trainOnSolution(puzzleToSolve, groundTruthSolution);

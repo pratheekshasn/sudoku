@@ -65,6 +65,47 @@ bool SudokuGenerator::generatePuzzle(Board& board, int difficulty) {
     return cellsRemoved >= difficulty / 2; // Accept if we removed at least half the target
 }
 
+bool SudokuGenerator::createPuzzleFromCompleteGrid(Board& board, int difficulty) {
+    // This method assumes the board is already a complete, valid solution
+    // We just remove cells to create a puzzle, without regenerating the grid
+    
+    // Create a list of all cell positions
+    std::vector<std::pair<int, int>> positions;
+    for (int i = 0; i < board.getBoardSize(); i++) {
+        for (int j = 0; j < board.getBoardSize(); j++) {
+            positions.push_back({i, j});
+        }
+    }
+    
+    // Shuffle the positions randomly
+    std::shuffle(positions.begin(), positions.end(), rng);
+    
+    // Remove cells while maintaining unique solution
+    int cellsRemoved = 0;
+    for (const auto& pos : positions) {
+        if (cellsRemoved >= difficulty) {
+            break;
+        }
+        
+        int row = pos.first;
+        int col = pos.second;
+        int originalValue = board.getCell(row, col).getValue();
+        
+        // Temporarily remove the cell
+        board.getCell(row, col).setValue(0);
+        
+        // Check if puzzle still has unique solution
+        if (hasUniqueSolution(board)) {
+            cellsRemoved++;
+        } else {
+            // Restore the value if it makes solution non-unique
+            board.getCell(row, col).setValue(originalValue);
+        }
+    }
+    
+    return cellsRemoved >= difficulty / 2; // Accept if we removed at least half the target
+}
+
 bool SudokuGenerator::fillGrid(Board& board) {
     // Find empty cell
     int row = -1, col = -1;

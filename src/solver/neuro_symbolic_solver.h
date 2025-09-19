@@ -83,6 +83,13 @@ private:
     bool isNakedSingle(const Board& board, int row, int col, int& value);
     bool isHiddenSingle(const Board& board, int row, int col, int value);
     
+    // Advanced symbolic reasoning patterns
+    std::vector<SolverMove> detectAdvancedPatterns(const Board& board);
+    std::vector<SolverMove> findNakedPairs(const Board& board);
+    std::vector<SolverMove> findPointingPairs(const Board& board);
+    std::vector<SolverMove> findBoxLineReductions(const Board& board);
+    std::vector<SolverMove> findXWingPatterns(const Board& board);
+    
     // Constraint satisfaction helpers
     std::vector<int> getCandidates(const Board& board, int row, int col);
     bool violatesConstraints(const Board& board, int row, int col, int value);

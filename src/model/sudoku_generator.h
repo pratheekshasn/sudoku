@@ -20,6 +20,9 @@ public:
     // Generate a puzzle by removing cells from a complete grid
     bool generatePuzzle(Board& board, int difficulty = 40);
     
+    // Create puzzle from already complete grid (for training)
+    bool createPuzzleFromCompleteGrid(Board& board, int difficulty = 40);
+    
     // Difficulty levels (number of cells to remove)
     enum Difficulty {
         EASY = 30,     // Remove 30 cells

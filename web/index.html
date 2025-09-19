@@ -68,6 +68,18 @@
             color: #2196F3;
         }
         
+        .cell.locked {
+            background: #e8f5e8;
+            color: #1b5e20;
+            font-weight: bold;
+            cursor: not-allowed;
+        }
+        
+        .cell.locked:hover {
+            background: #e8f5e8;
+            transform: none;
+        }
+        
         .cell.invalid {
             background: #ffebee;
             color: #f44336;
@@ -242,6 +254,7 @@
         let selectedCell = null;
         let selectedNumber = null;
         let gameBoard = Array(9).fill().map(() => Array(9).fill(0));
+        let lockedCells = Array(9).fill().map(() => Array(9).fill(false));
         
         // Initialize the game board
         function initializeBoard() {
@@ -267,6 +280,11 @@
         }
         
         function selectCell(row, col) {
+            // Don't select locked cells
+            if (lockedCells[row][col]) {
+                return;
+            }
+            
             // Remove previous selection
             if (selectedCell) {
                 selectedCell.classList.remove('selected');
@@ -289,6 +307,12 @@
         }
         
         async function handleInput(row, col, value) {
+            // Don't allow input on locked cells
+            if (lockedCells[row][col]) {
+                alert('🔒 This cell is part of the original puzzle and cannot be modified!');
+                return;
+            }
+            
             if (value === '' || (value >= '1' && value <= '9')) {
                 const numValue = value === '' ? 0 : parseInt(value);
                 
@@ -310,8 +334,7 @@
                     
                     if (result.success) {
                         // Update from C++ backend response
-                        gameBoard = result.data;
-                        updateDisplay();
+                        updateFromBackendData(result.data);
                         await updateGameStatus(); // Now async
                         
                         // Auto-move to next cell
@@ -370,10 +393,18 @@
             }
         }
         
-        function updateCellStyle(cell, value) {
-            cell.classList.remove('filled', 'invalid');
-            if (value !== '') {
-                cell.classList.add('filled');
+        function updateCellStyle(cell, value, isLocked) {
+            cell.classList.remove('filled', 'invalid', 'locked');
+            if (isLocked) {
+                cell.classList.add('locked');
+                cell.readOnly = true;
+                cell.title = '🔒 Original puzzle clue - cannot be modified';
+            } else {
+                cell.readOnly = false;
+                cell.title = '';
+                if (value !== '') {
+                    cell.classList.add('filled');
+                }
             }
         }
         
@@ -493,8 +524,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    gameBoard = result.data;
-                    updateDisplay();
+                    updateFromBackendData(result.data);
                     await updateGameStatus();
                     
                     // Show success message
@@ -522,8 +552,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    gameBoard = result.data;
-                    updateDisplay();
+                    updateFromBackendData(result.data);
                     await updateGameStatus(); // Now async
                 } else {
                     alert('❌ Failed to load puzzle: ' + result.message);
@@ -567,8 +596,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    gameBoard = result.data;
-                    updateDisplay();
+                    updateFromBackendData(result.data);
                     await updateGameStatus(); // Now async
                 } else {
                     alert('❌ Failed to clear board: ' + result.message);
@@ -579,13 +607,34 @@
             }
         }
         
+        function updateFromBackendData(data) {
+            if (data.cells) {
+                // New format with locked cell information
+                for (let row = 0; row < 9; row++) {
+                    for (let col = 0; col < 9; col++) {
+                        if (data.cells[row] && data.cells[row][col]) {
+                            gameBoard[row][col] = data.cells[row][col].value;
+                            lockedCells[row][col] = data.cells[row][col].locked;
+                        }
+                    }
+                }
+            } else {
+                // Old format - just numbers
+                gameBoard = data;
+                // Reset all locks for old format
+                lockedCells = Array(9).fill().map(() => Array(9).fill(false));
+            }
+            updateDisplay();
+        }
+        
         function updateDisplay() {
             for (let row = 0; row < 9; row++) {
                 for (let col = 0; col < 9; col++) {
                     const cell = document.getElementById(`cell-${row * 9 + col}`);
                     const value = gameBoard[row][col];
+                    const isLocked = lockedCells[row][col];
                     cell.value = value === 0 ? '' : value.toString();
-                    updateCellStyle(cell, cell.value);
+                    updateCellStyle(cell, cell.value, isLocked);
                 }
             }
         }
@@ -617,8 +666,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    gameBoard = result.data;
-                    updateDisplay();
+                    updateFromBackendData(result.data);
                     await updateGameStatus(); // Now async
                     
                     // Show connection success

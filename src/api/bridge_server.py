@@ -11,11 +11,21 @@ CORS(app)  # Allow web frontend to call API
 def call_cpp_api(command, params=""):
     """Call the C++ API and return parsed JSON response"""
     try:
-        # Path to compiled C++ API executable
-        api_path = "../../build/bin/sudoku_api"
+        # Path to compiled C++ API executable - try multiple possible paths
+        possible_paths = [
+            "../../build/bin/sudoku_api",  # From src/api/ directory
+            "./build/bin/sudoku_api",      # From project root
+            "build/bin/sudoku_api"         # From project root (alternative)
+        ]
         
-        if not os.path.exists(api_path):
-            return {"success": False, "message": "C++ API not found. Run 'make api' first."}
+        api_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                api_path = path
+                break
+        
+        if api_path is None:
+            return {"success": False, "message": "C++ API not found. Run 'make' first. Checked paths: " + str(possible_paths)}
         
         # Call C++ API with command and parameters
         if params:

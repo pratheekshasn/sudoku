@@ -15,6 +15,9 @@ public:
 
     int getValue() const;
     void setValue(int val);
+    
+    bool isLocked() const;
+    void setLocked(bool locked);
 
     const std::vector<int>& getCandidates() const;
     void removeCandidate(int candidate);
@@ -22,6 +25,7 @@ public:
 
 private:
     int value;
+    bool locked;
     std::vector<int> candidates;
 };
 

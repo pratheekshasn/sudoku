@@ -5,7 +5,7 @@ It holds the value of the cell and its possible candidates.
 
 #include "cell.h"
 
-Cell::Cell() : value(0), candidates{1, 2, 3, 4, 5, 6, 7, 8, 9} {}
+Cell::Cell() : value(0), locked(false), candidates{1, 2, 3, 4, 5, 6, 7, 8, 9} {}
 
 int Cell::getValue() const {
     return value;
@@ -13,6 +13,14 @@ int Cell::getValue() const {
 
 void Cell::setValue(int val) {
     value = val;
+}
+
+bool Cell::isLocked() const {
+    return locked;
+}
+
+void Cell::setLocked(bool isLocked) {
+    locked = isLocked;
 }
 
 const std::vector<int>& Cell::getCandidates() const {
