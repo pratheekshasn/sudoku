@@ -107,9 +107,10 @@ make run-server-simple
 Run the comprehensive test suite:
 
 ```bash
-make run-test-grid     # Test grid operations
-make run-test-board    # Test board architecture  
-make run-test-webview  # Test web interface
+make run-test-grid      # Test grid operations
+make run-test-board     # Test board architecture  
+make run-test-webview   # Test web interface
+make run-test-crossval  # Test cross-validation system
 ```
 
 ## Available Make Targets 🎯
@@ -125,6 +126,7 @@ make run-test-webview  # Test web interface
 | `make release` | Build optimized version |
 | `make clean` | Remove build files |
 | `make clean-all` | Remove build files and venv |
+| `make run-test-crossval` | Run cross-validation tests |
 | `make help` | Show detailed help |
 
 ## Extending the Code 🚀
@@ -146,6 +148,41 @@ Each solver automatically becomes available through the API:
 - `get_ai_move <solver_name>`
 - `get_ai_moves <solver_name>`
 - `solve_puzzle <solver_name>`
+
+## Cross-Validation System 🧪
+
+The neuro-symbolic solver now includes a comprehensive cross-validation system for systematic performance evaluation:
+
+### 🧠 Key Methodology:
+- **Training Phase**: Neural network learns from board patterns + symbolic reasoning hints
+- **Testing Phase**: Neural network makes predictions using ONLY learned patterns (no symbolic hints)
+- **True Neural Evaluation**: Tests the network's ability to recognize patterns independently
+
+### Features:
+- **K-Fold Cross-Validation**: Configurable number of folds (default: 5)
+- **Performance Metrics**: Precision, Recall, F1-Score, Mean Absolute Error
+- **Adaptive Testing**: Works with different board sizes (4x4, 9x9, 16x16)
+- **Detailed Reporting**: Statistical analysis with confidence intervals
+- **Pure Neural Testing**: Evaluates learned pattern recognition without symbolic assistance
+
+### API Commands:
+```bash
+# Run cross-validation with 50 puzzles, 5 folds
+./build/bin/sudoku_api cross_validate 50,5,false
+
+# Get performance metrics on 20 test puzzles
+./build/bin/sudoku_api performance_metrics 20
+
+# Verbose cross-validation
+./build/bin/sudoku_api cross_validate 30,3,true
+```
+
+### Cross-Validation Output:
+- **Overall Accuracy**: Average prediction accuracy across all folds
+- **Fold-by-Fold Results**: Individual accuracy for each fold
+- **Statistical Analysis**: Standard deviation and confidence intervals  
+- **Performance Breakdown**: Excellent (≥95%), Good (≥50%), Poor (<50%) results
+- **Detailed Metrics**: True/False positives/negatives, precision, recall
 
 
 ## How to Play 🎲

@@ -40,6 +40,10 @@ public:
     std::string getTrainingStats();
     std::string enableRealTimeLearning(bool enable = true);
     
+    // Cross-validation commands
+    std::string performCrossValidation(int numPuzzles = 50, int kFolds = 5, bool verbose = false);
+    std::string getPerformanceMetrics(int testPuzzles = 20);
+    
 private:
     Board board;
     SudokuGenerator generator;

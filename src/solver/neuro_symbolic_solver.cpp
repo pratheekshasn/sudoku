@@ -8,6 +8,10 @@ Demonstrates hybrid AI combining neural networks with symbolic reasoning
 #include <cmath>
 #include <random>
 #include <numeric>
+#include <iostream>
+#include <iomanip>
+#include <chrono>
+#include <sstream>
 
 // ============================================================================
 // SudokuNeuralNetwork Implementation
@@ -163,6 +167,13 @@ double SudokuNeuralNetwork::forward(const std::vector<double>& features) {
 double SudokuNeuralNetwork::predictMoveConfidence(const Board& board, int row, int col, int value,
                                                  const std::vector<double>& symbolicHints) {
     std::vector<double> features = extractFeatures(board, row, col, value, symbolicHints);
+    return forward(features);
+}
+
+double SudokuNeuralNetwork::predictMoveConfidencePure(const Board& board, int row, int col, int value) {
+    // Pure neural prediction - NO symbolic hints, only pattern recognition
+    std::vector<double> emptyHints(8, 0.0); // Default symbolic hints (all zeros)
+    std::vector<double> features = extractFeatures(board, row, col, value, emptyHints);
     return forward(features);
 }
 
@@ -446,19 +457,24 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
             if (board.getCell(row, col).getValue() == 0) {
                 for (int value = 1; value <= size; ++value) {
                     if (symbolicReasoner->validateMove(board, row, col, value)) {
-                        // Generate symbolic hints for this specific move
-                        std::vector<double> symbolicHints = symbolicReasoner->generateSymbolicHints(board, row, col, value);
+                        double confidence;
+                        std::string reasoning;
                         
-                        // Neural network receives both patterns AND symbolic reasoning
-                        double confidence = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
-                        
-                        // Generate reasoning based on symbolic hints
-                        std::string reasoning = "Symbolic-Informed Neural: ";
-                        if (symbolicHints[0] > 0.5) reasoning += "Forced move (only one possibility)";
-                        else if (symbolicHints[1] > 0.5) reasoning += "Naked single detected";
-                        else if (symbolicHints[2] > 0.5) reasoning += "Hidden single detected";
-                        else if (symbolicHints[3] > 0.5) reasoning += "Invalid move";
-                        else reasoning += "Pattern + Logic fusion";
+                        if (isTrainingMode) {
+                            // Training mode: Use symbolic hints to help neural network learn
+                            std::vector<double> symbolicHints = symbolicReasoner->generateSymbolicHints(board, row, col, value);
+                            confidence = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
+                            
+                            reasoning = "Training Mode - Symbolic-Informed: ";
+                            if (symbolicHints[0] > 0.5) reasoning += "Forced move";
+                            else if (symbolicHints[1] > 0.5) reasoning += "Naked single";
+                            else if (symbolicHints[2] > 0.5) reasoning += "Hidden single";
+                            else reasoning += "Pattern + Logic fusion";
+                        } else {
+                            // Inference mode: Pure neural network prediction (no symbolic hints)
+                            confidence = neuralNet->predictMoveConfidencePure(board, row, col, value);
+                            reasoning = "Pure Neural Network: Learned pattern recognition";
+                        }
                         
                         moves.emplace_back(row, col, value, reasoning, confidence);
                     }
@@ -525,4 +541,293 @@ void NeuroSymbolicSolver::learnFromError(const Board& board, const SolverMove& m
         correctPredictions++;
     }
     totalPredictions++;
+}
+
+// ============================================================================
+// Cross-Validation Implementation
+// ============================================================================
+
+NeuroSymbolicSolver::CrossValidationResult NeuroSymbolicSolver::performCrossValidation(
+    const std::vector<std::pair<Board, Board>>& puzzleSolutionPairs, int kFolds, bool verbose) {
+    
+    if (puzzleSolutionPairs.empty()) {
+        return {0.0, 0.0, 0.0, 0, 0, 0, 0, {}, "No data provided for cross-validation"};
+    }
+    
+    if (kFolds <= 1 || kFolds > static_cast<int>(puzzleSolutionPairs.size())) {
+        kFolds = std::min(5, static_cast<int>(puzzleSolutionPairs.size()));
+    }
+    
+    if (verbose) {
+        std::cout << "🧪 Starting " << kFolds << "-fold cross-validation with " 
+                  << puzzleSolutionPairs.size() << " puzzle-solution pairs...\n";
+    }
+    
+    // Create k-folds
+    auto folds = createKFolds(puzzleSolutionPairs, kFolds);
+    
+    CrossValidationResult result;
+    result.totalPuzzles = puzzleSolutionPairs.size();
+    result.correctSolutions = 0;
+    result.partialSolutions = 0;
+    result.failedSolutions = 0;
+    result.foldAccuracies.reserve(kFolds);
+    
+    double totalAccuracy = 0.0;
+    double totalConfidence = 0.0;
+    double totalSolveTime = 0.0;
+    
+    // Perform k-fold cross-validation
+    for (int fold = 0; fold < kFolds; ++fold) {
+        if (verbose) {
+            std::cout << "📊 Processing fold " << (fold + 1) << "/" << kFolds << "...\n";
+        }
+        
+        // Reset network for this fold
+        resetNetwork();
+        
+        // TRAINING PHASE: Train on all folds except the current test fold
+        setTrainingMode(true);
+        for (int trainFold = 0; trainFold < kFolds; ++trainFold) {
+            if (trainFold != fold) {
+                for (const auto& pair : folds[trainFold]) {
+                    trainOnSolution(pair.first, pair.second);
+                }
+            }
+        }
+        
+        // TESTING PHASE: Test on the current fold (NO symbolic hints!)
+        setTrainingMode(false);
+        auto startTime = std::chrono::high_resolution_clock::now();
+        double foldAccuracy = testModelOnFold(folds[fold], true);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        
+        double foldTime = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+        
+        result.foldAccuracies.push_back(foldAccuracy);
+        totalAccuracy += foldAccuracy;
+        totalSolveTime += foldTime;
+        
+        if (verbose) {
+            std::cout << "  ✅ Fold " << (fold + 1) << " accuracy: " 
+                      << std::fixed << std::setprecision(2) << (foldAccuracy * 100) << "%\n";
+        }
+    }
+    
+    // Calculate final results
+    result.accuracy = totalAccuracy / kFolds;
+    result.averageSolveTime = totalSolveTime / kFolds;
+    result.averageConfidence = totalPredictions > 0 ? 
+        static_cast<double>(correctPredictions) / totalPredictions : 0.0;
+    
+    // Count solution types based on accuracy thresholds
+    for (double acc : result.foldAccuracies) {
+        if (acc >= 0.95) result.correctSolutions++;
+        else if (acc >= 0.5) result.partialSolutions++;
+        else result.failedSolutions++;
+    }
+    
+    result.detailedReport = generateDetailedReport(result);
+    
+    if (verbose) {
+        std::cout << "\n🎯 Cross-Validation Results:\n";
+        std::cout << result.detailedReport << "\n";
+    }
+    
+    return result;
+}
+
+std::vector<std::vector<std::pair<Board, Board>>> NeuroSymbolicSolver::createKFolds(
+    const std::vector<std::pair<Board, Board>>& data, int kFolds) {
+    
+    // Shuffle the data for random distribution
+    std::vector<std::pair<Board, Board>> shuffledData = data;
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(shuffledData.begin(), shuffledData.end(), g);
+    
+    std::vector<std::vector<std::pair<Board, Board>>> folds(kFolds);
+    
+    // Distribute data across folds
+    for (size_t i = 0; i < shuffledData.size(); ++i) {
+        int foldIndex = i % kFolds;
+        folds[foldIndex].push_back(shuffledData[i]);
+    }
+    
+    return folds;
+}
+
+double NeuroSymbolicSolver::testModelOnFold(const std::vector<std::pair<Board, Board>>& testFold, 
+                                           bool calculateMetrics) {
+    int correctMoves = 0;
+    int totalMoves = 0;
+    
+    for (const auto& pair : testFold) {
+        Board testBoard = pair.first;  // Puzzle
+        const Board& solution = pair.second;  // Known solution
+        
+        int size = testBoard.getBoardSize();
+        
+        // Test each empty cell
+        for (int row = 0; row < size; ++row) {
+            for (int col = 0; col < size; ++col) {
+                if (testBoard.getCell(row, col).getValue() == 0) {
+                    int correctValue = solution.getCell(row, col).getValue();
+                    
+                    // Get all possible moves for this position
+                    std::vector<SolverMove> moves = getAllPossibleMoves(testBoard);
+                    
+                    // Find the move for this position with highest confidence
+                    SolverMove bestMove{-1, -1, -1, "", 0.0};
+                    for (const auto& move : moves) {
+                        if (move.row == row && move.col == col && move.confidence > bestMove.confidence) {
+                            bestMove = move;
+                        }
+                    }
+                    
+                    // Check if our prediction matches the correct solution
+                    if (bestMove.row != -1 && bestMove.value == correctValue) {
+                        correctMoves++;
+                    }
+                    totalMoves++;
+                }
+            }
+        }
+    }
+    
+    return totalMoves > 0 ? static_cast<double>(correctMoves) / totalMoves : 0.0;
+}
+
+NeuroSymbolicSolver::PerformanceMetrics NeuroSymbolicSolver::calculatePerformanceMetrics(
+    const std::vector<std::pair<Board, Board>>& testSet) {
+    
+    PerformanceMetrics metrics{0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0};
+    
+    double totalError = 0.0;
+    int totalPredictions = 0;
+    
+    for (const auto& pair : testSet) {
+        Board testBoard = pair.first;
+        const Board& solution = pair.second;
+        int size = testBoard.getBoardSize();
+        
+        for (int row = 0; row < size; ++row) {
+            for (int col = 0; col < size; ++col) {
+                if (testBoard.getCell(row, col).getValue() == 0) {
+                    int correctValue = solution.getCell(row, col).getValue();
+                    
+                    // Pure neural network prediction (no symbolic hints for true testing)
+                    double confidence = neuralNet->predictMoveConfidencePure(testBoard, row, col, correctValue);
+                    
+                    // Binary classification: high confidence (>0.5) = positive prediction
+                    bool predicted = confidence > 0.5;
+                    bool actual = true; // We're testing the correct value
+                    
+                    if (predicted && actual) metrics.truePositives++;
+                    else if (predicted && !actual) metrics.falsePositives++;
+                    else if (!predicted && actual) metrics.falseNegatives++;
+                    else metrics.trueNegatives++;
+                    
+                    // Calculate error for MAE
+                    totalError += std::abs(1.0 - confidence); // Target is 1.0 for correct moves
+                    totalPredictions++;
+                }
+            }
+        }
+    }
+    
+    // Calculate precision, recall, F1
+    if (metrics.truePositives + metrics.falsePositives > 0) {
+        metrics.precision = static_cast<double>(metrics.truePositives) / 
+                           (metrics.truePositives + metrics.falsePositives);
+    }
+    
+    if (metrics.truePositives + metrics.falseNegatives > 0) {
+        metrics.recall = static_cast<double>(metrics.truePositives) / 
+                        (metrics.truePositives + metrics.falseNegatives);
+    }
+    
+    if (metrics.precision + metrics.recall > 0) {
+        metrics.f1Score = 2 * (metrics.precision * metrics.recall) / 
+                         (metrics.precision + metrics.recall);
+    }
+    
+    metrics.meanAbsoluteError = totalPredictions > 0 ? totalError / totalPredictions : 0.0;
+    
+    return metrics;
+}
+
+std::string NeuroSymbolicSolver::generateDetailedReport(const CrossValidationResult& result) {
+    std::ostringstream report;
+    
+    report << "📈 Cross-Validation Detailed Report\n";
+    report << "=====================================\n";
+    report << "🧠 IMPORTANT: Testing uses PURE neural network (no symbolic hints)\n";
+    report << "📚 Training used symbolic hints, but testing evaluates learned patterns only\n";
+    report << "=====================================\n";
+    report << "📊 Overall Performance:\n";
+    report << "  • Average Accuracy: " << std::fixed << std::setprecision(2) 
+           << (result.accuracy * 100) << "%\n";
+    report << "  • Average Confidence: " << std::fixed << std::setprecision(2) 
+           << (result.averageConfidence * 100) << "%\n";
+    report << "  • Average Solve Time: " << std::fixed << std::setprecision(1) 
+           << result.averageSolveTime << " ms\n";
+    report << "\n";
+    
+    report << "🎯 Solution Quality:\n";
+    report << "  • Excellent (≥95%): " << result.correctSolutions 
+           << "/" << result.foldAccuracies.size() << " folds\n";
+    report << "  • Good (≥50%): " << result.partialSolutions 
+           << "/" << result.foldAccuracies.size() << " folds\n";
+    report << "  • Poor (<50%): " << result.failedSolutions 
+           << "/" << result.foldAccuracies.size() << " folds\n";
+    report << "\n";
+    
+    report << "📋 Fold-by-Fold Results:\n";
+    for (size_t i = 0; i < result.foldAccuracies.size(); ++i) {
+        report << "  • Fold " << (i + 1) << ": " << std::fixed << std::setprecision(2)
+               << (result.foldAccuracies[i] * 100) << "%\n";
+    }
+    
+    // Calculate standard deviation
+    double mean = result.accuracy;
+    double variance = 0.0;
+    for (double acc : result.foldAccuracies) {
+        variance += (acc - mean) * (acc - mean);
+    }
+    variance /= result.foldAccuracies.size();
+    double stdDev = std::sqrt(variance);
+    
+    report << "\n";
+    report << "📊 Statistical Analysis:\n";
+    report << "  • Standard Deviation: " << std::fixed << std::setprecision(3) 
+           << (stdDev * 100) << "%\n";
+    report << "  • Confidence Interval (95%): " << std::fixed << std::setprecision(2)
+           << ((mean - 1.96 * stdDev) * 100) << "% - " 
+           << ((mean + 1.96 * stdDev) * 100) << "%\n";
+    
+    return report.str();
+}
+
+void NeuroSymbolicSolver::resetNetwork() {
+    // Reinitialize the neural network to fresh state
+    int currentSize = neuralNet ? 9 : 9; // Default to 9x9 if null
+    neuralNet = std::make_unique<SudokuNeuralNetwork>(currentSize);
+    
+    // Reset tracking variables
+    correctPredictions = 0;
+    totalPredictions = 0;
+}
+
+void NeuroSymbolicSolver::saveNetworkState(const std::string& filename) {
+    // TODO: Implement network serialization
+    // For now, just log the action
+    std::cout << "🔄 Network state saving to '" << filename << "' (feature not yet implemented)\n";
+}
+
+bool NeuroSymbolicSolver::loadNetworkState(const std::string& filename) {
+    // TODO: Implement network deserialization
+    // For now, just log the action
+    std::cout << "🔄 Network state loading from '" << filename << "' (feature not yet implemented)\n";
+    return false;
 }

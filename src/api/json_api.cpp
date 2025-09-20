@@ -65,6 +65,29 @@ std::string SudokuJsonApi::processCommand(const std::string& command, const std:
             bool enable = params.empty() ? true : (params == "true" || params == "1");
             return enableRealTimeLearning(enable);
         }
+        else if (command == "cross_validate") {
+            // Parse params: "numPuzzles,kFolds,verbose" (optional)
+            std::istringstream iss(params);
+            std::string token;
+            int numPuzzles = 50, kFolds = 5;
+            bool verbose = false;
+            
+            if (std::getline(iss, token, ',') && !token.empty()) {
+                numPuzzles = std::stoi(token);
+            }
+            if (std::getline(iss, token, ',') && !token.empty()) {
+                kFolds = std::stoi(token);
+            }
+            if (std::getline(iss, token, ',') && !token.empty()) {
+                verbose = (token == "true" || token == "1");
+            }
+            
+            return performCrossValidation(numPuzzles, kFolds, verbose);
+        }
+        else if (command == "performance_metrics") {
+            int testPuzzles = params.empty() ? 20 : std::stoi(params);
+            return getPerformanceMetrics(testPuzzles);
+        }
         else {
             return createResponse(false, "Unknown command: " + command);
         }
@@ -601,5 +624,164 @@ std::string SudokuJsonApi::enableRealTimeLearning(bool enable) {
     result << "{\"real_time_learning\":" << (enable ? "true" : "false") << "}";
     
     std::string message = enable ? "Real-time learning enabled" : "Real-time learning disabled";
+    return createResponse(true, message, result.str());
+}
+
+std::string SudokuJsonApi::performCrossValidation(int numPuzzles, int kFolds, bool verbose) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
+    // Create neuro-symbolic solver
+    auto neuroSolver = std::make_unique<NeuroSymbolicSolver>();
+    if (!neuroSolver) {
+        return createResponse(false, "Failed to create neuro-symbolic solver");
+    }
+    
+    // Generate puzzle-solution pairs for cross-validation
+    std::vector<std::pair<Board, Board>> puzzleSolutionPairs;
+    puzzleSolutionPairs.reserve(numPuzzles);
+    
+    SudokuGenerator puzzleGenerator;
+    int successful = 0;
+    int failed = 0;
+    
+    for (int i = 0; i < numPuzzles; ++i) {
+        // Generate a complete solution first
+        Board completeBoard(3); // 9x9 board
+        
+        if (puzzleGenerator.generateCompleteGrid(completeBoard)) {
+            Board groundTruthSolution = completeBoard;
+            Board puzzleToValidate = completeBoard;
+            
+            // Create puzzle by removing cells
+            SudokuGenerator::Difficulty difficulty = 
+                static_cast<SudokuGenerator::Difficulty>(i % 4);
+            
+            if (puzzleGenerator.createPuzzleFromCompleteGrid(puzzleToValidate, difficulty)) {
+                puzzleSolutionPairs.emplace_back(puzzleToValidate, groundTruthSolution);
+                successful++;
+            } else {
+                failed++;
+            }
+        } else {
+            failed++;
+        }
+    }
+    
+    if (puzzleSolutionPairs.empty()) {
+        return createResponse(false, "Failed to generate puzzle-solution pairs for validation");
+    }
+    
+    // Perform cross-validation
+    auto cvResult = neuroSolver->performCrossValidation(puzzleSolutionPairs, kFolds, verbose);
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Create JSON response
+    std::ostringstream result;
+    result << "{"
+           << "\"cross_validation_results\":{"
+           << "\"accuracy\":" << std::fixed << std::setprecision(4) << cvResult.accuracy << ","
+           << "\"average_confidence\":" << std::fixed << std::setprecision(4) << cvResult.averageConfidence << ","
+           << "\"average_solve_time_ms\":" << std::fixed << std::setprecision(2) << cvResult.averageSolveTime << ","
+           << "\"total_puzzles\":" << cvResult.totalPuzzles << ","
+           << "\"correct_solutions\":" << cvResult.correctSolutions << ","
+           << "\"partial_solutions\":" << cvResult.partialSolutions << ","
+           << "\"failed_solutions\":" << cvResult.failedSolutions << ","
+           << "\"k_folds\":" << kFolds << ","
+           << "\"fold_accuracies\":[";
+    
+    for (size_t i = 0; i < cvResult.foldAccuracies.size(); ++i) {
+        if (i > 0) result << ",";
+        result << std::fixed << std::setprecision(4) << cvResult.foldAccuracies[i];
+    }
+    
+    result << "],"
+           << "\"total_validation_time_ms\":" << duration.count() << ","
+           << "\"puzzles_generated\":" << successful << ","
+           << "\"generation_failures\":" << failed
+           << "},"
+           << "\"detailed_report\":\"" << escapeJson(cvResult.detailedReport) << "\""
+           << "}";
+    
+    std::string message = "Cross-validation completed with " + std::to_string(kFolds) + 
+                         " folds on " + std::to_string(successful) + " puzzles";
+    
+    return createResponse(true, message, result.str());
+}
+
+std::string SudokuJsonApi::getPerformanceMetrics(int testPuzzles) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
+    // Create neuro-symbolic solver
+    auto neuroSolver = std::make_unique<NeuroSymbolicSolver>();
+    if (!neuroSolver) {
+        return createResponse(false, "Failed to create neuro-symbolic solver");
+    }
+    
+    // Generate test dataset
+    std::vector<std::pair<Board, Board>> testSet;
+    testSet.reserve(testPuzzles);
+    
+    SudokuGenerator puzzleGenerator;
+    int successful = 0;
+    
+    for (int i = 0; i < testPuzzles; ++i) {
+        Board completeBoard(3);
+        
+        if (puzzleGenerator.generateCompleteGrid(completeBoard)) {
+            Board groundTruthSolution = completeBoard;
+            Board testPuzzle = completeBoard;
+            
+            SudokuGenerator::Difficulty difficulty = 
+                static_cast<SudokuGenerator::Difficulty>(i % 4);
+            
+            if (puzzleGenerator.createPuzzleFromCompleteGrid(testPuzzle, difficulty)) {
+                testSet.emplace_back(testPuzzle, groundTruthSolution);
+                successful++;
+            }
+        }
+    }
+    
+    if (testSet.empty()) {
+        return createResponse(false, "Failed to generate test dataset");
+    }
+    
+    // TRAINING PHASE: Train the solver on half the data
+    neuroSolver->setTrainingMode(true);
+    int trainSize = testSet.size() / 2;
+    for (int i = 0; i < trainSize; ++i) {
+        neuroSolver->trainOnSolution(testSet[i].first, testSet[i].second);
+    }
+    
+    // TESTING PHASE: Calculate performance metrics on the remaining data (pure neural)
+    neuroSolver->setTrainingMode(false);
+    std::vector<std::pair<Board, Board>> testData(testSet.begin() + trainSize, testSet.end());
+    auto metrics = neuroSolver->calculatePerformanceMetrics(testData);
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Create JSON response
+    std::ostringstream result;
+    result << "{"
+           << "\"performance_metrics\":{"
+           << "\"precision\":" << std::fixed << std::setprecision(4) << metrics.precision << ","
+           << "\"recall\":" << std::fixed << std::setprecision(4) << metrics.recall << ","
+           << "\"f1_score\":" << std::fixed << std::setprecision(4) << metrics.f1Score << ","
+           << "\"mean_absolute_error\":" << std::fixed << std::setprecision(4) << metrics.meanAbsoluteError << ","
+           << "\"true_positives\":" << metrics.truePositives << ","
+           << "\"false_positives\":" << metrics.falsePositives << ","
+           << "\"true_negatives\":" << metrics.trueNegatives << ","
+           << "\"false_negatives\":" << metrics.falseNegatives << ","
+           << "\"test_puzzles\":" << testData.size() << ","
+           << "\"training_puzzles\":" << trainSize << ","
+           << "\"evaluation_time_ms\":" << duration.count()
+           << "}"
+           << "}";
+    
+    std::string message = "Performance metrics calculated on " + std::to_string(testData.size()) + 
+                         " test puzzles after training on " + std::to_string(trainSize) + " puzzles";
+    
     return createResponse(true, message, result.str());
 }

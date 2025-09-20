@@ -29,6 +29,9 @@ public:
     double predictMoveConfidence(const Board& board, int row, int col, int value, 
                                 const std::vector<double>& symbolicHints = {});
     
+    // Pure neural prediction without symbolic hints (for true testing)
+    double predictMoveConfidencePure(const Board& board, int row, int col, int value);
+    
     // Learn from successful moves (simplified training)
     void updateWeights(const Board& board, int row, int col, int value, bool wasCorrect,
                       const std::vector<double>& symbolicHints = {});
@@ -115,6 +118,45 @@ public:
     // Training interface
     void trainOnSolution(const Board& originalBoard, const Board& solvedBoard);
     
+    // Training mode control
+    void setTrainingMode(bool training) { isTrainingMode = training; }
+    bool isInTrainingMode() const { return isTrainingMode; }
+    
+    // Cross-validation system
+    struct CrossValidationResult {
+        double accuracy;
+        double averageConfidence;
+        double averageSolveTime;
+        int totalPuzzles;
+        int correctSolutions;
+        int partialSolutions;
+        int failedSolutions;
+        std::vector<double> foldAccuracies;
+        std::string detailedReport;
+    };
+    
+    CrossValidationResult performCrossValidation(const std::vector<std::pair<Board, Board>>& puzzleSolutionPairs,
+                                                int kFolds = 5, bool verbose = false);
+    
+    // Performance metrics
+    struct PerformanceMetrics {
+        double precision;
+        double recall;
+        double f1Score;
+        double meanAbsoluteError;
+        int truePositives;
+        int falsePositives;
+        int trueNegatives;
+        int falseNegatives;
+    };
+    
+    PerformanceMetrics calculatePerformanceMetrics(const std::vector<std::pair<Board, Board>>& testSet);
+    
+    // Training utilities
+    void resetNetwork();
+    void saveNetworkState(const std::string& filename);
+    bool loadNetworkState(const std::string& filename);
+    
     // Adapt neural network to different board size
     void adaptToBoardSize(int newSize);
 
@@ -125,9 +167,25 @@ private:
     // Learning from mistakes
     void learnFromError(const Board& board, const SolverMove& move, bool wasCorrect);
     
+    // Cross-validation helpers
+    std::vector<std::vector<std::pair<Board, Board>>> createKFolds(
+        const std::vector<std::pair<Board, Board>>& data, int kFolds);
+    
+    double testModelOnFold(const std::vector<std::pair<Board, Board>>& testFold,
+                          bool calculateMetrics = false);
+    
+    std::string generateDetailedReport(const CrossValidationResult& result);
+    
     // Performance tracking
     int correctPredictions = 0;
     int totalPredictions = 0;
+    
+    // Cross-validation state
+    std::vector<double> trainingHistory;
+    std::vector<double> validationHistory;
+    
+    // Training mode control
+    bool isTrainingMode = false;
 };
 
 #endif // SUDOKU_NEURO_SYMBOLIC_SOLVER_H

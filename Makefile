@@ -37,6 +37,7 @@ MAIN_TARGET = $(BINDIR)/sudoku
 TEST_GRID_TARGET = $(BINDIR)/test_grid
 TEST_BOARD_TARGET = $(BINDIR)/test_board
 TEST_WEBVIEW_TARGET = $(BINDIR)/test_webview
+TEST_CROSSVAL_TARGET = $(BINDIR)/test_cross_validation
 API_TARGET = $(BINDIR)/sudoku_api
 
 # Default target
@@ -87,6 +88,9 @@ $(TEST_BOARD_TARGET): $(TESTDIR)/test_board_architecture.cpp $(OBJECTS) | $(BIND
 $(TEST_WEBVIEW_TARGET): $(TESTDIR)/test_webview.cpp $(OBJECTS) | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(TESTDIR)/test_webview.cpp $(OBJECTS) -o $@
 
+$(TEST_CROSSVAL_TARGET): $(TESTDIR)/test_cross_validation.cpp $(OBJECTS) | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(TESTDIR)/test_cross_validation.cpp $(OBJECTS) -o $@
+
 # Run targets
 run: $(MAIN_TARGET)
 	./$(MAIN_TARGET)
@@ -129,6 +133,9 @@ run-test-board: $(TEST_BOARD_TARGET)
 run-test-webview: $(TEST_WEBVIEW_TARGET)
 	./$(TEST_WEBVIEW_TARGET)
 
+run-test-crossval: $(TEST_CROSSVAL_TARGET)
+	./$(TEST_CROSSVAL_TARGET)
+
 # Clean up
 clean:
 	rm -rf $(BUILDDIR)
@@ -165,6 +172,7 @@ help:
 	@echo "  run-test-grid - Build and run grid operator tests"
 	@echo "  run-test-board - Build and run board architecture tests"
 	@echo "  run-test-webview - Build and run webview interface tests"
+	@echo "  run-test-crossval - Build and run cross-validation tests"
 	@echo "  clean        - Remove build files only"
 	@echo "  clean-all    - Remove build files AND Python venv"
 	@echo "  debug        - Build with debug symbols"
