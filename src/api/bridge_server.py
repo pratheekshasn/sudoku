@@ -27,21 +27,39 @@ def call_cpp_api(command, params=""):
         if api_path is None:
             return {"success": False, "message": "C++ API not found. Run 'make' first. Checked paths: " + str(possible_paths)}
         
+        # Debug logging
+        print(f"🔍 Calling C++ API: {api_path} {command} {params}")
+        
         # Call C++ API with command and parameters
         if params:
             result = subprocess.run([api_path, command, params], 
-                                  capture_output=True, text=True, check=True)
+                                  capture_output=True, text=True, check=True, timeout=10)
         else:
             result = subprocess.run([api_path, command], 
-                                  capture_output=True, text=True, check=True)
+                                  capture_output=True, text=True, check=True, timeout=10)
+        
+        print(f"✅ C++ API returned: {result.stdout[:200]}...")
+        
+        # Extract JSON from stdout (skip debug messages)
+        stdout_lines = result.stdout.strip()
+        
+        # Find the JSON part (starts with { and ends with })
+        json_start = stdout_lines.find('{')
+        if json_start == -1:
+            raise ValueError("No JSON found in C++ output")
+        
+        json_part = stdout_lines[json_start:]
+        print(f"🔍 Extracted JSON: {json_part[:100]}...")
         
         # Parse JSON response from C++
-        return json.loads(result.stdout)
+        return json.loads(json_part)
         
+    except subprocess.TimeoutExpired as e:
+        return {"success": False, "message": f"C++ API timeout: {e}"}
     except subprocess.CalledProcessError as e:
         return {"success": False, "message": f"C++ API error: {e}"}
     except json.JSONDecodeError as e:
-        return {"success": False, "message": f"JSON parse error: {e}"}
+        return {"success": False, "message": f"JSON parse error: {e}, stdout: {result.stdout[:200] if 'result' in locals() else 'No output'}"}
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {e}"}
 
@@ -72,8 +90,8 @@ def load_puzzle():
 @app.route('/api/generate', methods=['POST'])
 def generate_puzzle():
     """Generate a new puzzle with specified difficulty using C++ backend"""
-    data = request.json
-    difficulty = data.get('difficulty', 'medium')  # Default to medium
+    data = request.json if request.is_json else {}
+    difficulty = data.get('difficulty', 'medium') if data else 'medium'
     
     response = call_cpp_api("generate_puzzle", difficulty)
     return jsonify(response)
@@ -99,8 +117,8 @@ def validate_board():
 @app.route('/api/ai/hint', methods=['POST'])
 def get_ai_hint():
     """Get AI hint using the symbolic-informed neural solver"""
-    data = request.json
-    solver_type = data.get('solver', 'neuro_symbolic')  # Default to our new solver
+    data = request.json if request.is_json else {}
+    solver_type = data.get('solver', 'neuro_symbolic') if data else 'neuro_symbolic'
     
     response = call_cpp_api("get_ai_move", solver_type)
     return jsonify(response)
@@ -108,8 +126,8 @@ def get_ai_hint():
 @app.route('/api/ai/moves', methods=['POST'])
 def get_ai_moves():
     """Get all possible AI moves with reasoning"""
-    data = request.json
-    solver_type = data.get('solver', 'neuro_symbolic')
+    data = request.json if request.is_json else {}
+    solver_type = data.get('solver', 'neuro_symbolic') if data else 'neuro_symbolic'
     
     response = call_cpp_api("get_ai_moves", solver_type)
     return jsonify(response)
@@ -117,8 +135,8 @@ def get_ai_moves():
 @app.route('/api/ai/solve', methods=['POST'])
 def solve_puzzle():
     """Solve the puzzle using AI"""
-    data = request.json
-    solver_type = data.get('solver', 'neuro_symbolic')
+    data = request.json if request.is_json else {}
+    solver_type = data.get('solver', 'neuro_symbolic') if data else 'neuro_symbolic'
     
     response = call_cpp_api("solve_puzzle", solver_type)
     return jsonify(response)
@@ -132,8 +150,8 @@ def get_ai_stats():
 @app.route('/api/ai/train', methods=['POST'])
 def train_ai():
     """Train the AI on puzzle batch"""
-    data = request.json
-    num_puzzles = data.get('puzzles', 10)
+    data = request.json if request.is_json else {}
+    num_puzzles = data.get('puzzles', 10) if data else 10
     
     response = call_cpp_api("train_batch", str(num_puzzles))
     return jsonify(response)
