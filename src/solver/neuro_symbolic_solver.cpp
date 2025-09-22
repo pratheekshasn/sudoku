@@ -4,6 +4,7 @@ Demonstrates hybrid AI combining neural networks with symbolic reasoning
 */
 
 #include "neuro_symbolic_solver.h"
+#include "../model/sudoku_generator.h"
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -12,6 +13,9 @@ Demonstrates hybrid AI combining neural networks with symbolic reasoning
 #include <iomanip>
 #include <chrono>
 #include <sstream>
+#include <fstream>
+#include <filesystem>
+#include <filesystem>
 
 // ============================================================================
 // SudokuNeuralNetwork Implementation
@@ -407,14 +411,22 @@ std::vector<double> SymbolicReasoner::generateSymbolicHints(const Board& board, 
 NeuroSymbolicSolver::NeuroSymbolicSolver(int boardSize) 
     : neuralNet(std::make_unique<SudokuNeuralNetwork>(boardSize))
     , symbolicReasoner(std::make_unique<SymbolicReasoner>()) {
+    
+    // Try to load existing trained model for this board size
+    std::string modelPath = "models/neuro_symbolic_" + std::to_string(boardSize) + "x" + std::to_string(boardSize) + ".bin";
+    if (loadNetworkState(modelPath)) {
+        std::cout << "✅ Loaded pre-trained model for " << boardSize << "x" << boardSize << " puzzles" << std::endl;
+    } else {
+        std::cout << "🆕 Starting with fresh neural network for " << boardSize << "x" << boardSize << " puzzles" << std::endl;
+    }
 }
 
 bool NeuroSymbolicSolver::solve(Board& board) {
     bool progress = true;
     int iterations = 0;
-    const int maxIterations = 1000;
+    const int maxIterations = 10000; // Increased limit for neural network
     
-    while (progress && !isBoardComplete(board) && iterations < maxIterations) {
+    while (progress && !board.isComplete() && iterations < maxIterations) {
         progress = false;
         SolverMove move{-1, -1, -1, "", 0.0}; // Initialize with default values
         
@@ -427,7 +439,7 @@ bool NeuroSymbolicSolver::solve(Board& board) {
         iterations++;
     }
     
-    return isBoardComplete(board);
+    return board.isComplete();
 }
 
 bool NeuroSymbolicSolver::canSolve(const Board& board) const {
@@ -460,21 +472,20 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
                         double confidence;
                         std::string reasoning;
                         
+                        // Always use symbolic-informed approach for solving (true neuro-symbolic)
+                        std::vector<double> symbolicHints = symbolicReasoner->generateSymbolicHints(board, row, col, value);
+                        confidence = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
+                        
                         if (isTrainingMode) {
-                            // Training mode: Use symbolic hints to help neural network learn
-                            std::vector<double> symbolicHints = symbolicReasoner->generateSymbolicHints(board, row, col, value);
-                            confidence = neuralNet->predictMoveConfidence(board, row, col, value, symbolicHints);
-                            
                             reasoning = "Training Mode - Symbolic-Informed: ";
-                            if (symbolicHints[0] > 0.5) reasoning += "Forced move";
-                            else if (symbolicHints[1] > 0.5) reasoning += "Naked single";
-                            else if (symbolicHints[2] > 0.5) reasoning += "Hidden single";
-                            else reasoning += "Pattern + Logic fusion";
                         } else {
-                            // Inference mode: Pure neural network prediction (no symbolic hints)
-                            confidence = neuralNet->predictMoveConfidencePure(board, row, col, value);
-                            reasoning = "Pure Neural Network: Learned pattern recognition";
+                            reasoning = "Neuro-Symbolic Inference: ";
                         }
+                        
+                        if (symbolicHints[0] > 0.5) reasoning += "Forced move";
+                        else if (symbolicHints[1] > 0.5) reasoning += "Naked single";
+                        else if (symbolicHints[2] > 0.5) reasoning += "Hidden single";
+                        else reasoning += "Pattern + Logic fusion";
                         
                         moves.emplace_back(row, col, value, reasoning, confidence);
                     }
@@ -524,6 +535,10 @@ void NeuroSymbolicSolver::trainOnSolution(const Board& originalBoard, const Boar
             }
         }
     }
+    
+    // Auto-save the trained model
+    std::string modelPath = "models/neuro_symbolic_" + std::to_string(size) + "x" + std::to_string(size) + ".bin";
+    saveNetworkState(modelPath);
 }
 
 void NeuroSymbolicSolver::adaptToBoardSize(int newSize) {
@@ -809,6 +824,38 @@ std::string NeuroSymbolicSolver::generateDetailedReport(const CrossValidationRes
     return report.str();
 }
 
+void NeuroSymbolicSolver::autoTrain(int boardSize) {
+    // Quick auto-training: generate a few puzzle-solution pairs and train
+    std::vector<std::pair<Board, Board>> trainingPairs;
+    
+    // Generate 10 quick training puzzles
+    SudokuGenerator generator;
+    for (int i = 0; i < 10; ++i) {
+        Board puzzleBoard(boardSize);
+        Board solutionBoard(boardSize);
+        
+        // Generate a complete grid
+        if (generator.generateCompleteGrid(solutionBoard)) {
+            puzzleBoard = solutionBoard;
+            
+            // Remove some cells to create a puzzle (easy level for quick training)
+            if (generator.generatePuzzle(puzzleBoard, SudokuGenerator::EASY)) {
+                trainingPairs.emplace_back(puzzleBoard, solutionBoard);
+            }
+        }
+    }
+    
+    // Train on the generated data
+    setTrainingMode(true);
+    for (const auto& pair : trainingPairs) {
+        trainOnSolution(pair.first, pair.second);
+    }
+    setTrainingMode(false);
+    
+    // Mark that we've done some training
+    correctPredictions = 1; // Prevent re-training on each solve call
+}
+
 void NeuroSymbolicSolver::resetNetwork() {
     // Reinitialize the neural network to fresh state
     int currentSize = neuralNet ? 9 : 9; // Default to 9x9 if null
@@ -820,14 +867,119 @@ void NeuroSymbolicSolver::resetNetwork() {
 }
 
 void NeuroSymbolicSolver::saveNetworkState(const std::string& filename) {
-    // TODO: Implement network serialization
-    // For now, just log the action
-    std::cout << "🔄 Network state saving to '" << filename << "' (feature not yet implemented)\n";
+    try {
+        // Create directory if it doesn't exist
+        std::filesystem::path filepath(filename);
+        if (filepath.has_parent_path()) {
+            std::filesystem::create_directories(filepath.parent_path());
+        }
+        
+        std::ofstream file(filename, std::ios::binary);
+        if (!file.is_open()) {
+            std::cerr << "❌ Failed to open file for saving: " << filename << std::endl;
+            return;
+        }
+        
+        // Save network metadata
+        int hiddenSize = neuralNet->getHiddenLayer().size();
+        int outputSize = neuralNet->getOutputLayer().size();
+        file.write(reinterpret_cast<const char*>(&hiddenSize), sizeof(hiddenSize));
+        file.write(reinterpret_cast<const char*>(&outputSize), sizeof(outputSize));
+        
+        // Save hidden layer weights and biases
+        for (const auto& neuron : neuralNet->getHiddenLayer()) {
+            int weightCount = neuron.weights.size();
+            file.write(reinterpret_cast<const char*>(&weightCount), sizeof(weightCount));
+            file.write(reinterpret_cast<const char*>(neuron.weights.data()), 
+                      weightCount * sizeof(double));
+            file.write(reinterpret_cast<const char*>(&neuron.bias), sizeof(neuron.bias));
+        }
+        
+        // Save output layer weights and biases
+        for (const auto& neuron : neuralNet->getOutputLayer()) {
+            int weightCount = neuron.weights.size();
+            file.write(reinterpret_cast<const char*>(&weightCount), sizeof(weightCount));
+            file.write(reinterpret_cast<const char*>(neuron.weights.data()), 
+                      weightCount * sizeof(double));
+            file.write(reinterpret_cast<const char*>(&neuron.bias), sizeof(neuron.bias));
+        }
+        
+        // Save performance metrics
+        file.write(reinterpret_cast<const char*>(&correctPredictions), sizeof(correctPredictions));
+        file.write(reinterpret_cast<const char*>(&totalPredictions), sizeof(totalPredictions));
+        
+        file.close();
+        std::cout << "💾 Neural network saved to: " << filename << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "❌ Error saving network: " << e.what() << std::endl;
+    }
 }
 
 bool NeuroSymbolicSolver::loadNetworkState(const std::string& filename) {
-    // TODO: Implement network deserialization
-    // For now, just log the action
-    std::cout << "🔄 Network state loading from '" << filename << "' (feature not yet implemented)\n";
-    return false;
+    try {
+        std::ifstream file(filename, std::ios::binary);
+        if (!file.is_open()) {
+            std::cout << "📂 No saved network found at: " << filename << std::endl;
+            return false;
+        }
+        
+        // Load network metadata
+        int hiddenSize, outputSize;
+        file.read(reinterpret_cast<char*>(&hiddenSize), sizeof(hiddenSize));
+        file.read(reinterpret_cast<char*>(&outputSize), sizeof(outputSize));
+        
+        // Verify network architecture matches
+        if (hiddenSize != static_cast<int>(neuralNet->getHiddenLayer().size()) || 
+            outputSize != static_cast<int>(neuralNet->getOutputLayer().size())) {
+            std::cerr << "❌ Network architecture mismatch. Expected hidden: " 
+                     << neuralNet->getHiddenLayer().size() << ", output: " << neuralNet->getOutputLayer().size()
+                     << ". Found hidden: " << hiddenSize << ", output: " << outputSize << std::endl;
+            file.close();
+            return false;
+        }
+        
+        // Load hidden layer weights and biases
+        for (auto& neuron : neuralNet->getHiddenLayer()) {
+            int weightCount;
+            file.read(reinterpret_cast<char*>(&weightCount), sizeof(weightCount));
+            
+            if (weightCount != static_cast<int>(neuron.weights.size())) {
+                std::cerr << "❌ Weight count mismatch in hidden layer" << std::endl;
+                file.close();
+                return false;
+            }
+            
+            file.read(reinterpret_cast<char*>(neuron.weights.data()), 
+                     weightCount * sizeof(double));
+            file.read(reinterpret_cast<char*>(&neuron.bias), sizeof(neuron.bias));
+        }
+        
+        // Load output layer weights and biases
+        for (auto& neuron : neuralNet->getOutputLayer()) {
+            int weightCount;
+            file.read(reinterpret_cast<char*>(&weightCount), sizeof(weightCount));
+            
+            if (weightCount != static_cast<int>(neuron.weights.size())) {
+                std::cerr << "❌ Weight count mismatch in output layer" << std::endl;
+                file.close();
+                return false;
+            }
+            
+            file.read(reinterpret_cast<char*>(neuron.weights.data()), 
+                     weightCount * sizeof(double));
+            file.read(reinterpret_cast<char*>(&neuron.bias), sizeof(neuron.bias));
+        }
+        
+        // Load performance metrics
+        file.read(reinterpret_cast<char*>(&correctPredictions), sizeof(correctPredictions));
+        file.read(reinterpret_cast<char*>(&totalPredictions), sizeof(totalPredictions));
+        
+        file.close();
+        std::cout << "📖 Neural network loaded from: " << filename 
+                 << " (Accuracy: " << correctPredictions << "/" << totalPredictions << ")" << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "❌ Error loading network: " << e.what() << std::endl;
+        return false;
+    }
 }

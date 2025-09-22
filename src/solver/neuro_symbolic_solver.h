@@ -73,6 +73,13 @@ private:
     // Learning rate for weight updates
     double learningRate = 0.01;
     std::mt19937 rng;
+
+public:
+    // Getter methods for persistence
+    const std::vector<Neuron>& getHiddenLayer() const { return hiddenLayer; }
+    std::vector<Neuron>& getHiddenLayer() { return hiddenLayer; }
+    const std::vector<Neuron>& getOutputLayer() const { return outputLayer; }
+    std::vector<Neuron>& getOutputLayer() { return outputLayer; }
 };
 
 // Symbolic reasoning engine - generates hints for neural network
@@ -186,6 +193,9 @@ private:
     
     // Training mode control
     bool isTrainingMode = false;
+    
+    // Auto-training for first time use
+    void autoTrain(int boardSize);
 };
 
 #endif // SUDOKU_NEURO_SYMBOLIC_SOLVER_H

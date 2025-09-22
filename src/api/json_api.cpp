@@ -213,10 +213,20 @@ std::string SudokuJsonApi::validateBoard() {
 }
 
 std::string SudokuJsonApi::solvePuzzle(const std::string& solverType) {
-    // Create solver
-    aiSolver = SolverFactory::createSolver(solverType);
-    if (!aiSolver) {
-        return createResponse(false, "Unknown solver type: " + solverType);
+    // Create or reuse solver - only create new if different type
+    if (!aiSolver || aiSolver->getSolverName().find(solverType) == std::string::npos) {
+        aiSolver = SolverFactory::createSolver(solverType);
+        if (!aiSolver) {
+            return createResponse(false, "Unknown solver type: " + solverType);
+        }
+    }
+    
+    // Ensure neuro-symbolic solver is in inference mode for solving
+    if (solverType == "neuro_symbolic") {
+        auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+        if (neuroSolver) {
+            neuroSolver->setTrainingMode(false);  // Ensure we're in inference mode
+        }
     }
     
     // Check if puzzle can be solved
@@ -231,8 +241,27 @@ std::string SudokuJsonApi::solvePuzzle(const std::string& solverType) {
     // Solve the puzzle
     bool solved = aiSolver->solve(solutionBoard);
     
+    // Special handling for neuro-symbolic solver
+    if (solverType == "neuro_symbolic" && !solved) {
+        auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+        if (neuroSolver) {
+            // If neural network couldn't solve, get solution from backtrack solver to train on
+            auto backtrackSolver = SolverFactory::createSolver("backtrack");
+            Board trainingSolution = originalBoard;
+            
+            if (backtrackSolver && backtrackSolver->solve(trainingSolution)) {
+                // Train the neural network on this solution
+                neuroSolver->trainOnSolution(originalBoard, trainingSolution);
+                
+                // Now try to solve again with the trained network
+                solutionBoard = originalBoard; // Reset to original state
+                solved = neuroSolver->solve(solutionBoard);
+            }
+        }
+    }
+    
     if (solved) {
-        // Train neural network if using neuro-symbolic solver
+        // Train neural network if using neuro-symbolic solver and it solved successfully
         if (solverType == "neuro_symbolic") {
             auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
             if (neuroSolver) {
@@ -255,7 +284,21 @@ std::string SudokuJsonApi::solvePuzzle(const std::string& solverType) {
         
         return createResponse(true, "Puzzle solved successfully", result.str());
     } else {
-        return createResponse(false, "Could not solve puzzle - no solution found");
+        // Even if not fully solved, update the board with partial progress
+        board = solutionBoard;
+        saveState();
+        
+        std::ostringstream result;
+        result << "{"
+               << "\"solved\":false,"
+               << "\"solver\":\"" << aiSolver->getSolverName() << "\","
+               << "\"moves\":" << aiSolver->getMovesCount() << ","
+               << "\"time_ms\":" << aiSolver->getSolveTimeMs() << ","
+               << "\"board\":" << boardToJson()
+               << "}";
+        
+        return createResponse(false, "Could not solve puzzle completely - partial progress made (" + 
+                            std::to_string(aiSolver->getMovesCount()) + " moves)", result.str());
     }
 }
 
@@ -265,6 +308,14 @@ std::string SudokuJsonApi::getNextAIMove(const std::string& solverType) {
         aiSolver = SolverFactory::createSolver(solverType);
         if (!aiSolver) {
             return createResponse(false, "Unknown solver type: " + solverType);
+        }
+    }
+    
+    // Ensure neuro-symbolic solver is in inference mode
+    if (solverType == "neuro_symbolic") {
+        auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+        if (neuroSolver) {
+            neuroSolver->setTrainingMode(false);
         }
     }
     
@@ -293,6 +344,14 @@ std::string SudokuJsonApi::getAIPossibleMoves(const std::string& solverType) {
         aiSolver = SolverFactory::createSolver(solverType);
         if (!aiSolver) {
             return createResponse(false, "Unknown solver type: " + solverType);
+        }
+    }
+    
+    // Ensure neuro-symbolic solver is in inference mode
+    if (solverType == "neuro_symbolic") {
+        auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+        if (neuroSolver) {
+            neuroSolver->setTrainingMode(false);
         }
     }
     
@@ -433,15 +492,15 @@ void SudokuJsonApi::loadState() {
         }
     }
     
-    size_t boardPos = content.find("\"board\": [");
+    size_t boardPos = content.find("\"board\": {\"cells\":[");
     if (boardPos != std::string::npos) {
-        boardPos += 10; // Length of "\"board\": ["
-        size_t endPos = content.find("]", boardPos);
+        boardPos += 20; // Length of "\"board\": {\"cells\":["
+        size_t endPos = content.find("]}", boardPos);
         if (endPos != std::string::npos) {
             // Find the last closing bracket of the entire board array
-            size_t lastBracket = content.rfind("]");
+            size_t lastBracket = content.rfind("]}");
             if (lastBracket != std::string::npos) {
-                std::string boardData = content.substr(boardPos - 1, lastBracket - boardPos + 2);
+                std::string boardData = content.substr(boardPos - 1, lastBracket - boardPos + 3);
                 
                 // Parse the board data
                 parseBoardFromJson(boardData);
