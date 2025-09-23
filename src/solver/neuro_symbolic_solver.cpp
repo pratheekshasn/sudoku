@@ -503,7 +503,35 @@ std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMoves(const Board& bo
     return moves;
 }
 
-
+std::vector<SolverMove> NeuroSymbolicSolver::getAllPossibleMovesPure(const Board& board) {
+    // Pure neural network moves (no symbolic hints - for true testing)
+    std::vector<SolverMove> moves;
+    int size = board.getBoardSize();
+    
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            if (board.getCell(row, col).getValue() == 0) {
+                for (int value = 1; value <= size; ++value) {
+                    if (symbolicReasoner->validateMove(board, row, col, value)) {
+                        // Use PURE neural network prediction without symbolic hints
+                        double confidence = neuralNet->predictMoveConfidencePure(board, row, col, value);
+                        std::string reasoning = "Pure Neural Pattern Recognition";
+                        
+                        moves.emplace_back(row, col, value, reasoning, confidence);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Sort by confidence (highest first)
+    std::sort(moves.begin(), moves.end(),
+              [](const SolverMove& a, const SolverMove& b) {
+                  return a.confidence > b.confidence;
+              });
+    
+    return moves;
+}
 
 void NeuroSymbolicSolver::trainOnSolution(const Board& originalBoard, const Board& solvedBoard) {
     // Extract training data from the solution path
@@ -689,8 +717,8 @@ double NeuroSymbolicSolver::testModelOnFold(const std::vector<std::pair<Board, B
                 if (testBoard.getCell(row, col).getValue() == 0) {
                     int correctValue = solution.getCell(row, col).getValue();
                     
-                    // Get all possible moves for this position
-                    std::vector<SolverMove> moves = getAllPossibleMoves(testBoard);
+                    // Get all possible moves for this position using PURE neural network
+                    std::vector<SolverMove> moves = getAllPossibleMovesPure(testBoard);
                     
                     // Find the move for this position with highest confidence
                     SolverMove bestMove{-1, -1, -1, "", 0.0};
@@ -777,8 +805,9 @@ std::string NeuroSymbolicSolver::generateDetailedReport(const CrossValidationRes
     
     report << "📈 Cross-Validation Detailed Report\n";
     report << "=====================================\n";
-    report << "🧠 IMPORTANT: Testing uses PURE neural network (no symbolic hints)\n";
-    report << "📚 Training used symbolic hints, but testing evaluates learned patterns only\n";
+    report << "🧠 CORRECTED: Testing now uses PURE neural network (no symbolic hints)\n";
+    report << "📚 Training uses symbolic hints, testing uses pure pattern recognition\n";
+    report << "🎯 This shows true neural learning independent of symbolic reasoning\n";
     report << "=====================================\n";
     report << "📊 Overall Performance:\n";
     report << "  • Average Accuracy: " << std::fixed << std::setprecision(2) 

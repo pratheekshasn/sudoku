@@ -115,6 +115,9 @@ public:
     bool getNextMove(const Board& board, SolverMove& move) override;
     std::vector<SolverMove> getAllPossibleMoves(const Board& board) override;
     
+    // Pure neural network moves (without symbolic hints - for true testing)
+    std::vector<SolverMove> getAllPossibleMovesPure(const Board& board);
+    
     // Solver information
     std::string getSolverName() const override { return "Symbolic-Informed Neural Solver"; }
     SolverDifficulty getDifficulty() const override { return SolverDifficulty::AI_NEURAL; }
