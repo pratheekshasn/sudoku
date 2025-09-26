@@ -32,6 +32,7 @@ public:
     
     // AI Solver commands
     std::string solvePuzzle(const std::string& solverType = "backtrack");
+    std::string solveCustomPuzzle(const std::string& solverType, const std::string& puzzleJson);
     std::string getNextAIMove(const std::string& solverType = "backtrack");
     std::string getAIPossibleMoves(const std::string& solverType = "backtrack");
     
@@ -52,6 +53,10 @@ private:
     
     // JSON formatting helpers
     std::string boardToJson();
+    std::string boardToJsonFromBoard(const Board& customBoard);
+    Board parseCustomPuzzle(const std::string& puzzleJson);
+    void parseCustomBoardFromJson(Board& board, const std::string& jsonData);
+    void parseCustomBoardFromArray(Board& board, const std::string& jsonData);
     std::string createResponse(bool success, const std::string& message, const std::string& data = "");
     std::string escapeJson(const std::string& str);
     void initializeSamplePuzzle();

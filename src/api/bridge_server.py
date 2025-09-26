@@ -141,6 +141,20 @@ def solve_puzzle():
     response = call_cpp_api("solve_puzzle", solver_type)
     return jsonify(response)
 
+# New endpoint: solve any custom puzzle
+@app.route('/api/ai/solve_custom', methods=['POST'])
+def solve_custom_puzzle():
+    """Solve any Sudoku puzzle provided as input"""
+    data = request.json if request.is_json else {}
+    puzzle = data.get('puzzle')
+    solver_type = data.get('solver', 'neuro_symbolic')
+    if not puzzle:
+        return jsonify({"success": False, "message": "No puzzle provided"})
+    # Pass puzzle as JSON string to C++ backend
+    puzzle_str = json.dumps(puzzle)
+    response = call_cpp_api("solve_custom_puzzle", f'{solver_type}|{puzzle_str}')
+    return jsonify(response)
+
 @app.route('/api/ai/stats', methods=['GET'])
 def get_ai_stats():
     """Get AI training statistics"""

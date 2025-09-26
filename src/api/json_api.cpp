@@ -7,6 +7,7 @@ JSON API Implementation for C++ Sudoku Game
 #include <iomanip>
 #include <fstream>
 #include <chrono>
+#include <cmath>
 
 SudokuJsonApi::SudokuJsonApi() : board(3), moveCount(0) {
     // Load existing state or initialize with sample puzzle
@@ -87,6 +88,16 @@ std::string SudokuJsonApi::processCommand(const std::string& command, const std:
         else if (command == "performance_metrics") {
             int testPuzzles = params.empty() ? 20 : std::stoi(params);
             return getPerformanceMetrics(testPuzzles);
+        }
+        else if (command == "solve_custom_puzzle") {
+            // Parse params: "solver_type|puzzle_json"
+            size_t delimiter = params.find('|');
+            if (delimiter == std::string::npos) {
+                return createResponse(false, "Invalid parameters for solve_custom_puzzle");
+            }
+            std::string solverType = params.substr(0, delimiter);
+            std::string puzzleJson = params.substr(delimiter + 1);
+            return solveCustomPuzzle(solverType, puzzleJson);
         }
         else {
             return createResponse(false, "Unknown command: " + command);
@@ -302,6 +313,99 @@ std::string SudokuJsonApi::solvePuzzle(const std::string& solverType) {
     }
 }
 
+std::string SudokuJsonApi::solveCustomPuzzle(const std::string& solverType, const std::string& puzzleJson) {
+    try {
+        // Parse the puzzle JSON to determine board size and content
+        Board customBoard = parseCustomPuzzle(puzzleJson);
+        
+        // Create or reuse solver - only create new if different type
+        if (!aiSolver || aiSolver->getSolverName().find(solverType) == std::string::npos) {
+            aiSolver = SolverFactory::createSolver(solverType);
+            if (!aiSolver) {
+                return createResponse(false, "Unknown solver type: " + solverType);
+            }
+        }
+        
+        // Ensure neuro-symbolic solver adapts to the new board size and is in inference mode
+        if (solverType == "neuro_symbolic") {
+            auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+            if (neuroSolver) {
+                neuroSolver->adaptToBoardSize(customBoard.getBoardSize());
+                neuroSolver->setTrainingMode(false);  // Ensure we're in inference mode
+            }
+        }
+        
+        // Check if puzzle can be solved
+        if (!aiSolver->canSolve(customBoard)) {
+            return createResponse(false, "Custom puzzle cannot be solved - invalid state");
+        }
+        
+        // Make copies for solving
+        Board originalBoard = customBoard;
+        Board solutionBoard = customBoard;
+        
+        // Solve the puzzle
+        bool solved = aiSolver->solve(solutionBoard);
+        
+        // Special handling for neuro-symbolic solver
+        if (solverType == "neuro_symbolic" && !solved) {
+            auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+            if (neuroSolver) {
+                // If neural network couldn't solve, get solution from backtrack solver to train on
+                auto backtrackSolver = SolverFactory::createSolver("backtrack");
+                Board trainingSolution = originalBoard;
+                
+                if (backtrackSolver && backtrackSolver->solve(trainingSolution)) {
+                    // Train the neural network on this solution
+                    neuroSolver->trainOnSolution(originalBoard, trainingSolution);
+                    
+                    // Now try to solve again with the trained network
+                    solutionBoard = originalBoard; // Reset to original state
+                    solved = neuroSolver->solve(solutionBoard);
+                }
+            }
+        }
+        
+        if (solved) {
+            // Train neural network if using neuro-symbolic solver and it solved successfully
+            if (solverType == "neuro_symbolic") {
+                auto* neuroSolver = dynamic_cast<NeuroSymbolicSolver*>(aiSolver.get());
+                if (neuroSolver) {
+                    neuroSolver->trainOnSolution(originalBoard, solutionBoard);
+                }
+            }
+            
+            std::ostringstream result;
+            result << "{"
+                   << "\"solved\":true,"
+                   << "\"solver\":\"" << aiSolver->getSolverName() << "\","
+                   << "\"moves\":" << aiSolver->getMovesCount() << ","
+                   << "\"time_ms\":" << aiSolver->getSolveTimeMs() << ","
+                   << "\"board_size\":" << solutionBoard.getBoardSize() << ","
+                   << "\"solution\":" << boardToJsonFromBoard(solutionBoard)
+                   << "}";
+            
+            return createResponse(true, "Custom puzzle solved successfully", result.str());
+        } else {
+            std::ostringstream result;
+            result << "{"
+                   << "\"solved\":false,"
+                   << "\"solver\":\"" << aiSolver->getSolverName() << "\","
+                   << "\"moves\":" << aiSolver->getMovesCount() << ","
+                   << "\"time_ms\":" << aiSolver->getSolveTimeMs() << ","
+                   << "\"board_size\":" << solutionBoard.getBoardSize() << ","
+                   << "\"partial_solution\":" << boardToJsonFromBoard(solutionBoard)
+                   << "}";
+            
+            return createResponse(false, "Could not solve custom puzzle completely - partial progress made (" + 
+                                std::to_string(aiSolver->getMovesCount()) + " moves)", result.str());
+        }
+    }
+    catch (const std::exception& e) {
+        return createResponse(false, "Error parsing custom puzzle: " + std::string(e.what()));
+    }
+}
+
 std::string SudokuJsonApi::getNextAIMove(const std::string& solverType) {
     // Create solver if not exists
     if (!aiSolver || aiSolver->getSolverName().find(solverType) == std::string::npos) {
@@ -395,6 +499,162 @@ std::string SudokuJsonApi::boardToJson() {
     
     oss << "]}";
     return oss.str();
+}
+
+std::string SudokuJsonApi::boardToJsonFromBoard(const Board& customBoard) {
+    int size = customBoard.getBoardSize();
+    std::ostringstream oss;
+    oss << "{\"cells\":[";
+    
+    for (int row = 0; row < size; row++) {
+        oss << "[";
+        for (int col = 0; col < size; col++) {
+            int value = customBoard.getCell(row, col).getValue();
+            bool locked = customBoard.getCell(row, col).isLocked();
+            oss << "{\"value\":" << value << ",\"locked\":" << (locked ? "true" : "false") << "}";
+            if (col < size - 1) oss << ",";
+        }
+        oss << "]";
+        if (row < size - 1) oss << ",";
+    }
+    
+    oss << "]}";
+    return oss.str();
+}
+
+Board SudokuJsonApi::parseCustomPuzzle(const std::string& puzzleJson) {
+    // Parse JSON to determine board size and create board
+    // Expected formats:
+    // 1. Simple 2D array: [[5,3,0,...], [6,0,0,...], ...]
+    // 2. Complex format with locked cells: {"cells": [[{"value":5,"locked":true},...], ...]}
+    
+    // Count the puzzle size by looking for array structure
+    int puzzleSize = 0;
+    size_t firstArray = puzzleJson.find('[');
+    if (firstArray != std::string::npos) {
+        // Find the second '[' which starts the first row
+        size_t firstRow = puzzleJson.find('[', firstArray + 1);
+        if (firstRow != std::string::npos) {
+            // Count commas + 1 in the first row to determine size
+            size_t pos = firstRow + 1;
+            int count = 1; // Start with 1 (for first element)
+            
+            while (pos < puzzleJson.length() && puzzleJson[pos] != ']') {
+                if (puzzleJson[pos] == ',') {
+                    count++;
+                }
+                pos++;
+            }
+            puzzleSize = count;
+        } else {
+            // Single level array - count all commas + 1 and take square root
+            int totalElements = 1;
+            for (char c : puzzleJson) {
+                if (c == ',') totalElements++;
+            }
+            puzzleSize = static_cast<int>(sqrt(totalElements));
+        }
+    }
+    
+    if (puzzleSize == 0) {
+        throw std::runtime_error("Could not determine puzzle size from JSON");
+    }
+    
+    // Determine grid size (4x4 -> gridSize=2, 9x9 -> gridSize=3, 16x16 -> gridSize=4)
+    int gridSize = static_cast<int>(sqrt(puzzleSize));
+    if (gridSize * gridSize != puzzleSize) {
+        throw std::runtime_error("Puzzle size must be a perfect square (4, 9, 16, 25, ...)");
+    }
+    
+    // Create board with correct size
+    Board customBoard(gridSize);
+    
+    // Parse the puzzle data
+    if (puzzleJson.find("\"value\"") != std::string::npos) {
+        // Complex format with locked cells
+        parseCustomBoardFromJson(customBoard, puzzleJson);
+    } else {
+        // Simple 2D array format
+        parseCustomBoardFromArray(customBoard, puzzleJson);
+    }
+    
+    return customBoard;
+}
+
+void SudokuJsonApi::parseCustomBoardFromJson(Board& board, const std::string& jsonData) {
+    // Parse complex format with locked cells: {"cells": [[{"value":5,"locked":true},...], ...]}
+    int size = board.getBoardSize();
+    int row = 0, col = 0;
+    bool inValue = false, inLocked = false;
+    std::string currentNumber;
+    std::string currentLocked;
+    
+    for (size_t i = 0; i < jsonData.length(); ++i) {
+        char c = jsonData[i];
+        
+        if (jsonData.substr(i, 8) == "\"value\":") {
+            inValue = true;
+            i += 7; // Skip to the number
+            currentNumber = "";
+        } else if (jsonData.substr(i, 9) == "\"locked\":") {
+            inLocked = true;
+            i += 8; // Skip to the boolean
+            currentLocked = "";
+        } else if (inValue && (c >= '0' && c <= '9')) {
+            currentNumber += c;
+        } else if (inValue && (c == ',' || c == '}')) {
+            inValue = false;
+            if (row < size && col < size) {
+                board.getCell(row, col).setValue(std::stoi(currentNumber));
+            }
+        } else if (inLocked && (c == 't' || c == 'f')) {
+            // Read "true" or "false"
+            if (c == 't') currentLocked = "true";
+            else currentLocked = "false";
+            inLocked = false;
+            
+            if (row < size && col < size) {
+                board.getCell(row, col).setLocked(currentLocked == "true");
+                col++;
+                if (col >= size) {
+                    col = 0;
+                    row++;
+                    if (row >= size) break;
+                }
+            }
+        }
+    }
+}
+
+void SudokuJsonApi::parseCustomBoardFromArray(Board& board, const std::string& jsonData) {
+    // Parse simple 2D array format: [[5,3,0,...], [6,0,0,...], ...]
+    int size = board.getBoardSize();
+    int row = 0, col = 0;
+    bool inNumber = false;
+    std::string currentNumber;
+    
+    for (char c : jsonData) {
+        if (c >= '0' && c <= '9') {
+            if (!inNumber) {
+                inNumber = true;
+                currentNumber = "";
+            }
+            currentNumber += c;
+        } else if (inNumber && (c == ',' || c == ']')) {
+            if (row < size && col < size) {
+                int value = std::stoi(currentNumber);
+                board.getCell(row, col).setValue(value);
+                board.getCell(row, col).setLocked(value != 0); // Lock non-zero cells by default
+                col++;
+                if (col >= size) {
+                    col = 0;
+                    row++;
+                    if (row >= size) break;
+                }
+            }
+            inNumber = false;
+        }
+    }
 }
 
 std::string SudokuJsonApi::createResponse(bool success, const std::string& message, const std::string& data) {
